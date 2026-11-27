@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod merge;
 mod settings;
 mod sync;
 mod updater;
@@ -25,10 +26,11 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.0.5 — Reliable Chat Sync Fix (Language Server + SQLite WAL)\n\n\
-• Gracefully stops both Antigravity.exe and language_server.exe (with /F /T fallback) before Push & Pull so SQLite databases flush cleanly and are never locked or overwritten.\n\
-• Mirrors SQLite -wal/-shm sidecar files for conversations and conversation_summaries.db (and cleans stale sidecars when absent) so recent chats are never lost on Push or Pull.\n\
-• Automatically migrates older v2.0.0/v2.0.1 settings.json files to enable Chat Index DB (conversation_summaries) and Antigravity State so pulled chats always appear in the sidebar.";
+Antigravity Sync v2.1.0 — Non-Destructive Smart Merge & Duplicate Resolution\n\n\
+• Replaced destructive /MIR mirroring with non-destructive smart merging so PC and Laptop chats never overwrite or delete each other.\n\
+• Added bundled SQLite WAL checkpointing (PRAGMA wal_checkpoint(TRUNCATE)), integrity verification (PRAGMA quick_check), and true row-level merging for conversation_summaries.db.\n\
+• Automatically resolves Google Drive conflict duplicates (e.g. 'file (1).pb') and cleans orphaned -wal/-shm files.\n\
+• Gracefully stops both Antigravity.exe and language_server.exe before Push & Pull and migrates legacy settings.json files.";
 
 struct AppState {
     settings: AppSettings,

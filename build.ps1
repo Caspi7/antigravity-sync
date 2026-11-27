@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-$version = "2.0.5"
+$version = "2.1.0"
 $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 $cargo = "$env:USERPROFILE\.cargo\bin\cargo.exe"
 $mingwBin = (Get-ChildItem "$env:USERPROFILE\.gemini\antigravity\bin\llvm-mingw" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1).FullName

@@ -282,6 +282,19 @@ fn run_sync_impl(
         })?;
     }
 
+    // Resolve any Google Drive conflict copies (e.g. `agyhub_summaries_proto (1).pb`) in sync root.
+    let root_conflicts = crate::merge::cleanup_drive_conflicts_in_dir(sync_root);
+    if root_conflicts > 0 {
+        on_progress(SyncProgress {
+            percent: 4.5,
+            status_text: format!("Resolved {root_conflicts} Drive conflict duplicate(s)"),
+            log_line: Some(format!(
+                "Resolved {root_conflicts} Google Drive conflict duplicate(s) in {}",
+                sync_root.display()
+            )),
+        });
+    }
+
     if mode == SyncMode::Pull {
         on_progress(SyncProgress {
             percent: 5.0,
@@ -353,53 +366,24 @@ fn run_sync_impl(
         }
 
         let target_start = Instant::now();
-        let next_pct = progress_percent(start_pct, end_pct, done_weight + weights[idx], total_weight);
         let target_count = targets.len();
         let target_num = idx + 1;
 
         on_progress(SyncProgress {
             percent: pct,
             status_text: format!("{:.0}% · {} ({}/{}) · {}", pct, target.label, target_num, target_count, eta_text),
-            log_line: Some(format!("[{}] Syncing {} ({}/{})...", mode.label(), target.label, target_num, target_count)),
+            log_line: Some(format!("[{}] Merging {} ({}/{})...", mode.label(), target.label, target_num, target_count)),
         });
 
-        // Clean stale local SQLite WAL/SHM files before pulling Chat Index DB
-        if mode == SyncMode::Pull && target.name == "conversation_summaries" {
-            for suffix in ["conversation_summaries.db-wal", "conversation_summaries.db-shm"] {
-                let _ = fs::remove_file(dst.with_file_name(suffix));
-            }
-        }
-
-        run_robocopy_with_tick(src, dst, target.is_dir, &cancel, |elapsed| {
-            let frac = (elapsed.as_secs_f32() / (elapsed.as_secs_f32() + 4.0)).clamp(0.0, 0.92);
-            let live_pct = pct + (next_pct - pct) * frac;
-            on_progress(SyncProgress {
-                percent: live_pct,
-                status_text: format!(
-                    "{:.0}% · [{}] {} ({}/{}) — {:.1}s elapsed",
-                    live_pct,
-                    mode.label(),
-                    target.label,
-                    target_num,
-                    target_count,
-                    elapsed.as_secs_f32()
-                ),
-                log_line: None,
-            });
-        })?;
-
-        // Mirror SQLite WAL/SHM sidecar files for Chat Index DB so uncheckpointed writes are never lost
-        if target.name == "conversation_summaries" {
-            for suffix in ["conversation_summaries.db-wal", "conversation_summaries.db-shm"] {
-                let side_src = src.with_file_name(suffix);
-                let side_dst = dst.with_file_name(suffix);
-                if side_src.is_file() {
-                    let _ = run_robocopy(&side_src, &side_dst, false, &cancel);
-                } else if side_dst.is_file() {
-                    let _ = fs::remove_file(&side_dst);
-                }
-            }
-        }
+        let merge_stats = if target.name == "conversations" {
+            crate::merge::merge_conversations_dir(src, dst, &cancel)?
+        } else if target.name == "conversation_summaries" {
+            crate::merge::merge_conversation_summaries_db(src, dst, &cancel)?
+        } else if target.is_dir {
+            crate::merge::merge_directory_additive(src, dst, &cancel)?
+        } else {
+            crate::merge::merge_single_file(src, dst, &cancel)?
+        };
         synced_count += 1;
 
         done_weight += weights[idx];
@@ -411,13 +395,31 @@ fn run_sync_impl(
             format!("~{} remaining", format_eta(eta_secs))
         };
 
+        let detail = if target.name == "conversation_summaries" && merge_stats.rows_merged > 0 {
+            format!("{} rows merged", merge_stats.rows_merged)
+        } else {
+            let mut parts = vec![
+                format!("+{} new", merge_stats.copied),
+                format!("~{} updated", merge_stats.updated),
+                format!("{} kept", merge_stats.kept_existing),
+            ];
+            if merge_stats.conflicts_resolved > 0 {
+                parts.push(format!("{} duplicates resolved", merge_stats.conflicts_resolved));
+            }
+            if merge_stats.orphans_removed > 0 {
+                parts.push(format!("{} orphan WALs cleaned", merge_stats.orphans_removed));
+            }
+            parts.join(", ")
+        };
+
         on_progress(SyncProgress {
             percent: post_pct,
             status_text: format!("{:.0}% · {}", post_pct, post_eta),
             log_line: Some(format!(
-                "[{}] {} complete ({:.1}s)",
+                "[{}] {} merged ({}; {:.1}s)",
                 mode.label(),
                 target.label,
+                detail,
                 target_start.elapsed().as_secs_f32()
             )),
         });
