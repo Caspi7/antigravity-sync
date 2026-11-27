@@ -10,8 +10,8 @@ fn main() {
         }
         res.set("ProductName", "Antigravity Sync");
         res.set("FileDescription", "Antigravity Sync");
-        res.set("FileVersion", "2.1.1.0");
-        res.set("ProductVersion", "2.1.1");
+        res.set("FileVersion", "2.1.2.0");
+        res.set("ProductVersion", "2.1.2");
         if res.compile().is_ok()
             && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("gnu")
         {

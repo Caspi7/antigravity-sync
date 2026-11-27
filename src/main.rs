@@ -26,8 +26,8 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.1.1 — Custom Logo & Titlebar Icon\n\n\
-• Added a custom File Inventory-style logo (navy squircle, cyan cloud, warm gold sync arrows) embedded in the window titlebar, taskbar, executable, and Setup installer.\n\
+Antigravity Sync v2.1.2 — Fluent Blue Logo Style\n\n\
+• Updated the Antigravity Sync logo to match File Inventory's vibrant Fluent blue gradient rounded-square style with crisp white sync arrows across the titlebar, taskbar, executable, and installer.\n\
 • Includes v2.1.0 non-destructive smart merge, bundled SQLite WAL checkpointing & row-level summary merge, and Google Drive conflict cleanup.";
 
 struct AppState {
