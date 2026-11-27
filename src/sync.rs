@@ -312,20 +312,14 @@ fn run_sync_impl(
     let start_pct: f32 = if mode == SyncMode::Pull { 10.0 } else { 5.0 };
     let end_pct: f32 = 95.0;
 
-    // Pre-compute byte weights so progress & ETA reflect large vs small folders accurately.
+    // Use lightweight per-target weights so sync starts immediately without pre-walking thousands
+    // of Google Drive files (live elapsed progress ticks keep the UI responsive during large targets).
     let weights: Vec<u64> = targets
         .iter()
-        .map(|target| {
-            let remote = remote_path_for(sync_root, target);
-            let src = match mode {
-                SyncMode::Push => &target.local_path,
-                SyncMode::Pull => &remote,
-            };
-            if path_exists_for_kind(src, target.is_dir) {
-                entry_size_bytes(src, target.is_dir).max(1)
-            } else {
-                1
-            }
+        .map(|target| match target.name.as_str() {
+            "brain" | "globalStorage" | "workspaceStorage" => 40,
+            "conversations" | "config" => 15,
+            _ => 5,
         })
         .collect();
     let total_weight: u64 = weights.iter().sum::<u64>().max(1);
@@ -366,6 +360,7 @@ fn run_sync_impl(
         }
 
         let target_start = Instant::now();
+        let next_pct = progress_percent(start_pct, end_pct, done_weight + weights[idx], total_weight);
         let target_count = targets.len();
         let target_num = idx + 1;
 
@@ -375,14 +370,40 @@ fn run_sync_impl(
             log_line: Some(format!("[{}] Merging {} ({}/{})...", mode.label(), target.label, target_num, target_count)),
         });
 
-        let merge_stats = if target.name == "conversations" {
-            crate::merge::merge_conversations_dir(src, dst, &cancel)?
+        let detail = if target.name == "conversations" {
+            let stats = crate::merge::merge_conversations_dir(src, dst, &cancel)?;
+            format_merge_detail(&stats)
         } else if target.name == "conversation_summaries" {
-            crate::merge::merge_conversation_summaries_db(src, dst, &cancel)?
+            let stats = crate::merge::merge_conversation_summaries_db(src, dst, &cancel)?;
+            if stats.rows_merged > 0 {
+                format!("{} rows merged", stats.rows_merged)
+            } else {
+                format_merge_detail(&stats)
+            }
         } else if target.is_dir {
-            crate::merge::merge_directory_additive(src, dst, &cancel)?
+            // Use fast multi-threaded robocopy (/E /XO /MT:16) for large asset/config directories:
+            // /E + /XO is strictly non-destructive (copies new & newer files, never deletes existing).
+            run_robocopy_with_tick(src, dst, true, &cancel, |elapsed| {
+                let frac = (elapsed.as_secs_f32() / (elapsed.as_secs_f32() + 4.0)).clamp(0.0, 0.92);
+                let live_pct = pct + (next_pct - pct) * frac;
+                on_progress(SyncProgress {
+                    percent: live_pct,
+                    status_text: format!(
+                        "{:.0}% · [{}] {} ({}/{}) — {:.1}s elapsed",
+                        live_pct,
+                        mode.label(),
+                        target.label,
+                        target_num,
+                        target_count,
+                        elapsed.as_secs_f32()
+                    ),
+                    log_line: None,
+                });
+            })?;
+            "additive /MT:16 merge".to_string()
         } else {
-            crate::merge::merge_single_file(src, dst, &cancel)?
+            let stats = crate::merge::merge_single_file(src, dst, &cancel)?;
+            format_merge_detail(&stats)
         };
         synced_count += 1;
 
@@ -393,23 +414,6 @@ fn run_sync_impl(
         } else {
             let eta_secs = estimate_remaining_secs(copy_start.elapsed(), done_weight, total_weight);
             format!("~{} remaining", format_eta(eta_secs))
-        };
-
-        let detail = if target.name == "conversation_summaries" && merge_stats.rows_merged > 0 {
-            format!("{} rows merged", merge_stats.rows_merged)
-        } else {
-            let mut parts = vec![
-                format!("+{} new", merge_stats.copied),
-                format!("~{} updated", merge_stats.updated),
-                format!("{} kept", merge_stats.kept_existing),
-            ];
-            if merge_stats.conflicts_resolved > 0 {
-                parts.push(format!("{} duplicates resolved", merge_stats.conflicts_resolved));
-            }
-            if merge_stats.orphans_removed > 0 {
-                parts.push(format!("{} orphan WALs cleaned", merge_stats.orphans_removed));
-            }
-            parts.join(", ")
         };
 
         on_progress(SyncProgress {
@@ -445,6 +449,21 @@ fn run_sync_impl(
     });
 
     Ok(summary)
+}
+
+fn format_merge_detail(merge_stats: &crate::merge::MergeStats) -> String {
+    let mut parts = vec![
+        format!("+{} new", merge_stats.copied),
+        format!("~{} updated", merge_stats.updated),
+        format!("{} kept", merge_stats.kept_existing),
+    ];
+    if merge_stats.conflicts_resolved > 0 {
+        parts.push(format!("{} duplicates resolved", merge_stats.conflicts_resolved));
+    }
+    if merge_stats.orphans_removed > 0 {
+        parts.push(format!("{} orphan WALs cleaned", merge_stats.orphans_removed));
+    }
+    parts.join(", ")
 }
 
 fn run_taskkill(args: &[&str], cancel: &AtomicBool) -> Result<bool, String> {
@@ -488,8 +507,14 @@ fn stop_process_gracefully(image_name: &str, grace: Duration, cancel: &AtomicBoo
 }
 
 fn close_antigravity(cancel: &AtomicBool) -> Result<bool, String> {
-    let closed_ui = stop_process_gracefully("Antigravity.exe", Duration::from_millis(2500), cancel)?;
-    let closed_ls = stop_process_gracefully("language_server.exe", Duration::from_millis(1200), cancel)?;
+    let closed_ui = stop_process_gracefully("Antigravity.exe", Duration::from_millis(1500), cancel)?;
+    let closed_ls = if crate::win32::is_process_running("language_server.exe") {
+        let _ = run_taskkill(&["/F", "/T", "/IM", "language_server.exe"], cancel)?;
+        let _ = wait_for_process_exit("language_server.exe", Duration::from_millis(1000), cancel)?;
+        true
+    } else {
+        false
+    };
     Ok(closed_ui || closed_ls)
 }
 
@@ -507,8 +532,13 @@ fn create_backup(
         )
     })?;
 
+    // Back up critical chat databases, state, and annotations (skip multi-GB brain/storage caches
+    // since Pull is now non-destructive and never deletes local files).
     for target in targets {
         check_cancelled(cancel)?;
+        if matches!(target.name.as_str(), "brain" | "globalStorage" | "workspaceStorage") {
+            continue;
+        }
         if !path_exists_for_kind(&target.local_path, target.is_dir) {
             continue;
         }
@@ -561,14 +591,14 @@ fn run_robocopy_with_tick(
                 dst.display()
             )
         })?;
-        cmd.arg(clean_robocopy_dir(src))
-            .arg(clean_robocopy_dir(dst))
-            .args([
-                "/MIR", "/FFT", "/MT:16", "/R:1", "/W:1", "/NFL", "/NDL", "/NP", "/NJH", "/NJS",
-                "/XD", "cache", "Cache", "Code Cache", "GPUCache", "CachedData", "Crashpad",
-                "logs", ".system_generated", "browser_sandbox", "temp", "tmp", "__pycache__", "node_modules",
-                "/XF", "*.log", "*.tmp", "*.bak",
-            ]);
+            cmd.arg(clean_robocopy_dir(src))
+                .arg(clean_robocopy_dir(dst))
+                .args([
+                    "/E", "/XO", "/FFT", "/MT:16", "/R:1", "/W:1", "/NFL", "/NDL", "/NP", "/NJH", "/NJS",
+                    "/XD", "cache", "Cache", "Code Cache", "GPUCache", "CachedData", "Crashpad",
+                    "logs", ".system_generated", "browser_sandbox", "temp", "tmp", "__pycache__", "node_modules",
+                    "/XF", "*.log", "*.tmp", "*.bak", "* (*).*",
+                ]);
     } else {
         let src_dir = src.parent().ok_or_else(|| {
             format!("Source file '{}' has no parent directory.", src.display())

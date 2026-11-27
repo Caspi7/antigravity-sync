@@ -7,22 +7,6 @@ use std::time::{Duration, SystemTime};
 
 const MTIME_TOLERANCE: Duration = Duration::from_secs(2);
 
-pub const EXCLUDED_DIR_NAMES: [&str; 13] = [
-    "cache",
-    "Cache",
-    "Code Cache",
-    "GPUCache",
-    "CachedData",
-    "Crashpad",
-    "logs",
-    ".system_generated",
-    "browser_sandbox",
-    "temp",
-    "tmp",
-    "__pycache__",
-    "node_modules",
-];
-
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct MergeStats {
     pub copied: usize,
@@ -49,12 +33,6 @@ fn file_mtime(path: &Path) -> SystemTime {
 
 fn file_size(path: &Path) -> u64 {
     fs::metadata(path).map(|m| m.len()).unwrap_or(0)
-}
-
-fn is_excluded_dir(name: &str) -> bool {
-    EXCLUDED_DIR_NAMES
-        .iter()
-        .any(|ex| ex.eq_ignore_ascii_case(name))
 }
 
 fn is_excluded_file(name: &str) -> bool {
@@ -118,6 +96,22 @@ pub fn sqlite_quick_check(db_path: &Path) -> bool {
     conn.query_row("PRAGMA quick_check;", [], |row| row.get::<_, String>(0))
         .map(|res| res.eq_ignore_ascii_case("ok"))
         .unwrap_or(false)
+}
+
+/// Returns `true` if `candidate` and `existing` have the same size and mtimes within `MTIME_TOLERANCE`.
+fn is_unchanged(candidate: &Path, existing: &Path) -> bool {
+    if !existing.is_file() {
+        return false;
+    }
+    if file_size(candidate) != file_size(existing) {
+        return false;
+    }
+    let cand_time = file_mtime(candidate);
+    let exist_time = file_mtime(existing);
+    let diff = cand_time
+        .duration_since(exist_time)
+        .or_else(|_| exist_time.duration_since(cand_time));
+    matches!(diff, Ok(d) if d <= MTIME_TOLERANCE)
 }
 
 /// Returns `true` if `candidate` should replace `existing` (newest-wins with 2s Drive tolerance;
@@ -274,7 +268,8 @@ pub fn cleanup_orphaned_wal_files(dir: &Path) -> usize {
 }
 
 /// Non-destructive, checkpoint-first, integrity-checked merge for `conversations/`.
-/// Never deletes conversations that only exist on `dst`; for shared UUIDs, keeps the newer valid DB.
+/// Fast-skips unchanged `.db` files (same size & mtime within 2s) so Google Drive folders
+/// never stall on unnecessary SQLite quick_checks; never deletes chats that only exist on `dst`.
 pub fn merge_conversations_dir(
     src: &Path,
     dst: &Path,
@@ -309,8 +304,23 @@ pub fn merge_conversations_dir(
 
         let dst_path = dst.join(name);
         if lower.ends_with(".db") {
+            let wal_exists = src_path.with_file_name(format!("{name}-wal")).is_file();
+            // Fast path: if destination exists with same size & mtime (and no pending source WAL), skip SQLite open.
+            if !wal_exists && is_unchanged(&src_path, &dst_path) {
+                stats.kept_existing += 1;
+                continue;
+            }
+
+            // If destination exists and is strictly newer than source (and has no WAL to flush), keep destination.
+            if dst_path.is_file() && !wal_exists && !is_newer_or_better(&src_path, &dst_path) {
+                stats.kept_existing += 1;
+                continue;
+            }
+
             // Flush any WAL journal on source before checking & copying
-            let _ = checkpoint_sqlite_file(&src_path);
+            if wal_exists {
+                let _ = checkpoint_sqlite_file(&src_path);
+            }
             if !sqlite_quick_check(&src_path) {
                 continue;
             }
@@ -334,7 +344,7 @@ pub fn merge_conversations_dir(
             copy_file_atomic(&src_path, &dst_path)?;
             stats.copied += 1;
         } else if is_newer_or_better(&src_path, &dst_path) {
-            copy_file_atomic(&src_path, &dst_path)?;
+            copy_file_atomic(&src_path, &dst_entry_or(&dst_path))?;
             stats.updated += 1;
         } else {
             stats.kept_existing += 1;
@@ -345,71 +355,8 @@ pub fn merge_conversations_dir(
     Ok(stats)
 }
 
-/// Non-destructive additive newest-wins recursive merge for `brain/`, `annotations/`, `config/`, etc.
-/// Never deletes files or subdirectories that exist only on `dst`.
-pub fn merge_directory_additive(
-    src: &Path,
-    dst: &Path,
-    cancel: &AtomicBool,
-) -> Result<MergeStats, String> {
-    check_cancelled(cancel)?;
-    fs::create_dir_all(dst)
-        .map_err(|e| format!("Failed to create '{}': {e}", dst.display()))?;
-
-    let mut stats = MergeStats::default();
-    let mut stack = vec![(src.to_path_buf(), dst.to_path_buf())];
-
-    while let Some((cur_src, cur_dst)) = stack.pop() {
-        check_cancelled(cancel)?;
-        stats.conflicts_resolved += cleanup_drive_conflicts_in_dir(&cur_src);
-        stats.conflicts_resolved += cleanup_drive_conflicts_in_dir(&cur_dst);
-
-        let entries = match fs::read_dir(&cur_src) {
-            Ok(rd) => rd,
-            Err(_) => continue,
-        };
-
-        for entry in entries.flatten() {
-            check_cancelled(cancel)?;
-            let src_entry = entry.path();
-            let Some(name) = src_entry.file_name().and_then(|n| n.to_str()) else {
-                continue;
-            };
-            let Ok(ft) = entry.file_type() else {
-                continue;
-            };
-            if ft.is_symlink() {
-                continue;
-            }
-
-            if ft.is_dir() {
-                if is_excluded_dir(name) {
-                    continue;
-                }
-                let next_dst = cur_dst.join(name);
-                fs::create_dir_all(&next_dst).map_err(|e| {
-                    format!("Failed to create '{}': {e}", next_dst.display())
-                })?;
-                stack.push((src_entry, next_dst));
-            } else if ft.is_file() {
-                if is_excluded_file(name) || canonical_name_if_conflict(name).is_some() {
-                    continue;
-                }
-                let dst_entry = cur_dst.join(name);
-                if !dst_entry.is_file() {
-                    copy_file_atomic(&src_entry, &dst_entry)?;
-                    stats.copied += 1;
-                } else if is_newer_or_better(&src_entry, &dst_entry) {
-                    copy_file_atomic(&src_entry, &dst_entry)?;
-                    stats.updated += 1;
-                } else {
-                    stats.kept_existing += 1;
-                }
-            }
-        }
-    }
-
-    Ok(stats)
+fn dst_entry_or(p: &Path) -> PathBuf {
+    p.to_path_buf()
 }
 
 /// True row-level SQLite merge for `conversation_summaries.db`.

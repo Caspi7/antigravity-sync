@@ -103,7 +103,7 @@ pub fn is_process_running(image_name: &str) -> bool {
 }
 
 pub fn is_antigravity_running() -> bool {
-    is_process_running("Antigravity.exe") || is_process_running("language_server.exe")
+    is_process_running("Antigravity.exe")
 }
 
 pub fn antigravity_exe_path() -> Option<PathBuf> {

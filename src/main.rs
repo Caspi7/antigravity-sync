@@ -26,9 +26,9 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.1.2 — Fluent Blue Logo Style\n\n\
-• Updated the Antigravity Sync logo to match File Inventory's vibrant Fluent blue gradient rounded-square style with crisp white sync arrows across the titlebar, taskbar, executable, and installer.\n\
-• Includes v2.1.0 non-destructive smart merge, bundled SQLite WAL checkpointing & row-level summary merge, and Google Drive conflict cleanup.";
+Antigravity Sync v2.1.3 — Fast Non-Destructive Sync & Clean Process Detection\n\n\
+• Eliminated multi-minute Push/Pull hangs: uses multi-threaded additive robocopy (/E /XO /MT:16) for large asset/storage folders, skips unchanged conversation DBs without re-running SQLite quick_check over Google Drive, removes the pre-sync Drive file-walk stall, and skips multi-GB cache folders in pre-Pull safety backups.\n\
+• Fixed false 'Antigravity is running' status when Antigravity.exe is closed (lingering language_server.exe is still stopped cleanly during sync without blocking the status badge).";
 
 struct AppState {
     settings: AppSettings,
