@@ -27,10 +27,9 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.2.0 — Live File Progress & 1-Click Plugin Installer\n\n\
-• Live Push/Pull Progress: Streams real-time copied file counts and current filename from robocopy (/MT:32) so large folders never look stuck.\n\
-• Faster Target Scanning: Skips cache/node_modules/.system_generated when scanning target sizes.\n\
-• 1-Click 'Install Plugin' / 'Plugin Ready' Button: Installs or repairs the Antigravity Sync plugin (including @modelcontextprotocol/sdk and config.json registration) directly from the command bar.";
+Antigravity Sync v2.2.1 — Dynamic Plugin Node.js Discovery\n\n\
+• Dynamic Node.js & npm Lookup: 'Install Plugin' and the Setup installer now automatically detect Node.js in Antigravity's bundled folder, Program Files, AppData, NVM, Scoop, or PATH.\n\
+• Cross-Machine Plugin Health Check: Detects when a synced mcp_config.json points to a non-existent node.exe path from another PC so one click repairs it.";
 
 struct AppState {
     settings: AppSettings,

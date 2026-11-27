@@ -13,10 +13,10 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Antigravity Sync Setup")]
-[assembly: AssemblyDescription("Installer for Antigravity Sync v2.2.0")]
-[assembly: AssemblyVersion("2.2.0.0")]
-[assembly: AssemblyFileVersion("2.2.0.0")]
-[assembly: AssemblyInformationalVersion("2.2.0")]
+[assembly: AssemblyDescription("Installer for Antigravity Sync v2.2.1")]
+[assembly: AssemblyVersion("2.2.1.0")]
+[assembly: AssemblyFileVersion("2.2.1.0")]
+[assembly: AssemblyInformationalVersion("2.2.1")]
 
 namespace AntigravitySyncSetup
 {
@@ -40,7 +40,7 @@ namespace AntigravitySyncSetup
 
     static class InstallerCore
     {
-        public const string AppVersion = "2.2.0";
+        public const string AppVersion = "2.2.1";
         public const string RepoOwner = "Caspi7";
         public const string RepoName = "antigravity-sync";
         public const string LatestReleaseApiUrl = "https://api.github.com/repos/" + RepoOwner + "/" + RepoName + "/releases/latest";
@@ -120,24 +120,8 @@ namespace AntigravitySyncSetup
                 WriteEmbeddedTextResource("package.json", Path.Combine(pluginDir, "package.json"));
                 WriteEmbeddedTextResource("server.mjs", Path.Combine(pluginDir, "server.mjs"));
 
-                // Locate Antigravity's bundled node.exe & npm.cmd dynamically for this machine
-                string nodeRoot = Path.Combine(userProfile, @".gemini\antigravity\bin\node");
-                string nodeExe = "node";
-                string npmCmd = null;
-                if (Directory.Exists(nodeRoot))
-                {
-                    foreach (string dir in Directory.GetDirectories(nodeRoot))
-                    {
-                        string candidateNode = Path.Combine(dir, "node.exe");
-                        if (File.Exists(candidateNode))
-                        {
-                            nodeExe = candidateNode;
-                            string candidateNpm = Path.Combine(dir, "npm.cmd");
-                            if (File.Exists(candidateNpm)) npmCmd = candidateNpm;
-                            break;
-                        }
-                    }
-                }
+                // Locate node.exe & npm dynamically (Antigravity bundled, Program Files, AppData, NVM, Scoop, or PATH)
+                string nodeExe = FindNodeExe(userProfile);
 
                 string escapedNode = nodeExe.Replace("\\", "\\\\");
                 string escapedServer = Path.Combine(pluginDir, "server.mjs").Replace("\\", "\\\\");
@@ -150,15 +134,23 @@ namespace AntigravitySyncSetup
                 {
                     string nodeDir = Path.GetDirectoryName(nodeExe);
                     string npmCli = Path.Combine(nodeDir, @"node_modules\npm\bin\npm-cli.js");
+                    string npmCmd = Path.Combine(nodeDir, "npm.cmd");
+                    ProcessStartInfo psi = null;
                     if (File.Exists(npmCli))
                     {
-                        var psi = new ProcessStartInfo(nodeExe, "\"" + npmCli + "\" install --omit=dev --no-audit --no-fund")
-                        {
-                            WorkingDirectory = pluginDir,
-                            UseShellExecute = false,
-                            CreateNoWindow = true,
-                            WindowStyle = ProcessWindowStyle.Hidden
-                        };
+                        psi = new ProcessStartInfo(nodeExe, "\"" + npmCli + "\" install --omit=dev --no-audit --no-fund");
+                    }
+                    else if (File.Exists(npmCmd))
+                    {
+                        psi = new ProcessStartInfo("cmd.exe", "/C \"" + npmCmd + "\" install --omit=dev --no-audit --no-fund");
+                    }
+
+                    if (psi != null)
+                    {
+                        psi.WorkingDirectory = pluginDir;
+                        psi.UseShellExecute = false;
+                        psi.CreateNoWindow = true;
+                        psi.WindowStyle = ProcessWindowStyle.Hidden;
                         string curPath = Environment.GetEnvironmentVariable("PATH") ?? "";
                         psi.EnvironmentVariables["PATH"] = nodeDir + ";" + curPath;
                         using (var proc = Process.Start(psi))
@@ -172,6 +164,59 @@ namespace AntigravitySyncSetup
                 EnsurePluginEnabledInConfig(Path.Combine(configDir, "config.json"), "antigravity-sync");
             }
             catch { }
+        }
+
+        private static string FindNodeExe(string userProfile)
+        {
+            string nodeRoot = Path.Combine(userProfile, @".gemini\antigravity\bin\node");
+            if (Directory.Exists(nodeRoot))
+            {
+                foreach (string dir in Directory.GetDirectories(nodeRoot))
+                {
+                    string candidate = Path.Combine(dir, "node.exe");
+                    if (File.Exists(candidate)) return candidate;
+                }
+            }
+
+            string[] candidates = new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"nodejs\node.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), @"nodejs\node.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\nodejs\node.exe"),
+                Path.Combine(Environment.GetEnvironmentVariable("NVM_SYMLINK") ?? "", "node.exe"),
+                Path.Combine(userProfile, @"scoop\shims\node.exe")
+            };
+            foreach (string c in candidates)
+            {
+                if (!string.IsNullOrEmpty(c) && File.Exists(c)) return c;
+            }
+
+            try
+            {
+                var psi = new ProcessStartInfo("where.exe", "node")
+                {
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+                using (var proc = Process.Start(psi))
+                {
+                    if (proc != null)
+                    {
+                        string output = proc.StandardOutput.ReadToEnd();
+                        proc.WaitForExit(3000);
+                        foreach (string rawLine in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            string line = rawLine.Trim();
+                            if (File.Exists(line)) return line;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return "node";
         }
 
         private static void EnsurePluginEnabledInConfig(string configPath, string pluginName)
