@@ -25,12 +25,12 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.0.1 — Fluent Installer & Manual Update Check\n\n\
-• Added a manual Check Updates button in the top command bar and Release Notes modal (matching File Inventory).\n\
-• Upgraded the Windows installer to the File Inventory Fluent look & feel with automatic GitHub version checking, custom install folder, Desktop/Start Menu shortcut toggles, and auto-update preference.\n\
-• Full Rust + Slint native WINDOWS_GUI (PE Subsystem 2) with 4 persisted themes (System, Light, Dark, Dark Blue).\n\
-• Built-in 1-click GitHub Auto-Updater with live progress, SHA-256 verification, clean mutex handoff, and silent /S install.\n\
-• Multi-threaded robocopy (/MT:8) with % + ETA progress, responsive Cancel, and automatic safety backups before every Pull.";
+Antigravity Sync v2.0.2 — Auto-Import Chats, Faster Push & Live Progress\n\n\
+• Added Chat Index DB (conversation_summaries.db) and Antigravity State (antigravity_state.pbtxt) so pulled chats automatically appear in Antigravity's sidebar.\n\
+• Automatically clears stale SQLite -wal/-shm files on Pull for clean chat import.\n\
+• Much faster Push & cleaner Drive folder: added robocopy /FFT /MT:16 and excluded temporary caches, logs, browser_sandbox, and .system_generated folders, plus writes a sync_manifest.json summary.\n\
+• Live elapsed timer & smooth progress updates every 300ms during sync so the app never looks frozen.\n\
+• Manual Check Updates button and File Inventory-style Fluent installer with automatic GitHub version checking.";
 
 struct AppState {
     settings: AppSettings,

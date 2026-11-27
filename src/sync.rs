@@ -122,6 +122,20 @@ fn targets_with_roots(home: &Path, app_data: &Path) -> Vec<SyncTarget> {
             is_dir: false,
             origin: r"%USERPROFILE%\.gemini\antigravity\agyhub_summaries_proto.pb".to_string(),
         },
+        SyncTarget {
+            name: "conversation_summaries".to_string(),
+            label: "Chat Index DB".to_string(),
+            local_path: gemini_ag.join("conversation_summaries.db"),
+            is_dir: false,
+            origin: r"%USERPROFILE%\.gemini\antigravity\conversation_summaries.db".to_string(),
+        },
+        SyncTarget {
+            name: "antigravity_state".to_string(),
+            label: "Antigravity State".to_string(),
+            local_path: gemini_ag.join("antigravity_state.pbtxt"),
+            is_dir: false,
+            origin: r"%USERPROFILE%\.gemini\antigravity\antigravity_state.pbtxt".to_string(),
+        },
     ]
 }
 
@@ -338,13 +352,42 @@ fn run_sync_impl(
             continue;
         }
 
+        let target_start = Instant::now();
+        let next_pct = progress_percent(start_pct, end_pct, done_weight + weights[idx], total_weight);
+        let target_count = targets.len();
+        let target_num = idx + 1;
+
         on_progress(SyncProgress {
             percent: pct,
-            status_text: format!("{:.0}% · {} · {}", pct, eta_text, target.label),
-            log_line: Some(format!("[{}] Syncing {}...", mode.label(), target.name)),
+            status_text: format!("{:.0}% · {} ({}/{}) · {}", pct, target.label, target_num, target_count, eta_text),
+            log_line: Some(format!("[{}] Syncing {} ({}/{})...", mode.label(), target.label, target_num, target_count)),
         });
 
-        run_robocopy(src, dst, target.is_dir, &cancel)?;
+        // Clean stale SQLite WAL/SHM files before pulling Chat Index DB so Antigravity imports chats cleanly
+        if mode == SyncMode::Pull && target.name == "conversation_summaries" {
+            let wal = dst.with_file_name("conversation_summaries.db-wal");
+            let shm = dst.with_file_name("conversation_summaries.db-shm");
+            let _ = fs::remove_file(wal);
+            let _ = fs::remove_file(shm);
+        }
+
+        run_robocopy_with_tick(src, dst, target.is_dir, &cancel, |elapsed| {
+            let frac = (elapsed.as_secs_f32() / (elapsed.as_secs_f32() + 4.0)).clamp(0.0, 0.92);
+            let live_pct = pct + (next_pct - pct) * frac;
+            on_progress(SyncProgress {
+                percent: live_pct,
+                status_text: format!(
+                    "{:.0}% · [{}] {} ({}/{}) — {:.1}s elapsed",
+                    live_pct,
+                    mode.label(),
+                    target.label,
+                    target_num,
+                    target_count,
+                    elapsed.as_secs_f32()
+                ),
+                log_line: None,
+            });
+        })?;
         synced_count += 1;
 
         done_weight += weights[idx];
@@ -359,8 +402,17 @@ fn run_sync_impl(
         on_progress(SyncProgress {
             percent: post_pct,
             status_text: format!("{:.0}% · {}", post_pct, post_eta),
-            log_line: Some(format!("[{}] {} complete", mode.label(), target.name)),
+            log_line: Some(format!(
+                "[{}] {} complete ({:.1}s)",
+                mode.label(),
+                target.label,
+                target_start.elapsed().as_secs_f32()
+            )),
         });
+    }
+
+    if mode == SyncMode::Push {
+        let _ = write_sync_manifest(sync_root, &targets);
     }
 
     let elapsed_secs = overall_start.elapsed().as_secs_f64();
@@ -422,11 +474,36 @@ fn create_backup(
     Ok(backup_dir)
 }
 
+fn write_sync_manifest(sync_root: &Path, targets: &[&SyncTarget]) -> Result<(), String> {
+    let machine = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "unknown".to_string());
+    let stamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let names: Vec<&str> = targets.iter().map(|t| t.name.as_str()).collect();
+    let manifest = serde_json::json!({
+        "app_version": crate::updater::APP_VERSION,
+        "last_push": stamp,
+        "machine": machine,
+        "targets": names,
+        "excluded_caches": ["cache", "Cache", "Code Cache", "GPUCache", "CachedData", "Crashpad", "logs", ".system_generated", "browser_sandbox", "temp", "tmp", "__pycache__", "node_modules"]
+    });
+    let json = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
+    fs::write(sync_root.join("sync_manifest.json"), format!("{json}\n")).map_err(|e| e.to_string())
+}
+
 fn run_robocopy(
     src: &Path,
     dst: &Path,
     is_dir: bool,
     cancel: &AtomicBool,
+) -> Result<(), String> {
+    run_robocopy_with_tick(src, dst, is_dir, cancel, |_| {})
+}
+
+fn run_robocopy_with_tick(
+    src: &Path,
+    dst: &Path,
+    is_dir: bool,
+    cancel: &AtomicBool,
+    on_tick: impl Fn(Duration),
 ) -> Result<(), String> {
     check_cancelled(cancel)?;
 
@@ -441,7 +518,12 @@ fn run_robocopy(
         })?;
         cmd.arg(clean_robocopy_dir(src))
             .arg(clean_robocopy_dir(dst))
-            .args(["/MIR", "/MT:8", "/R:2", "/W:2", "/NFL", "/NDL", "/NP", "/NJH", "/NJS"]);
+            .args([
+                "/MIR", "/FFT", "/MT:16", "/R:1", "/W:1", "/NFL", "/NDL", "/NP", "/NJH", "/NJS",
+                "/XD", "cache", "Cache", "Code Cache", "GPUCache", "CachedData", "Crashpad",
+                "logs", ".system_generated", "browser_sandbox", "temp", "tmp", "__pycache__", "node_modules",
+                "/XF", "*.log", "*.tmp", "*.bak", "*-wal", "*-shm",
+            ]);
     } else {
         let src_dir = src.parent().ok_or_else(|| {
             format!("Source file '{}' has no parent directory.", src.display())
@@ -461,7 +543,7 @@ fn run_robocopy(
         cmd.arg(clean_robocopy_dir(src_dir))
             .arg(clean_robocopy_dir(dst_dir))
             .arg(file_name)
-            .args(["/R:2", "/W:2", "/NFL", "/NDL", "/NP", "/NJH", "/NJS"]);
+            .args(["/IS", "/IT", "/R:1", "/W:1", "/NFL", "/NDL", "/NP", "/NJH", "/NJS"]);
     }
 
     cmd.stdin(Stdio::null())
@@ -472,7 +554,7 @@ fn run_robocopy(
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("Failed to start robocopy.exe: {e}"))?;
-    let status = wait_child_with_cancel(&mut child, cancel)?;
+    let status = wait_child_with_cancel_and_tick(&mut child, cancel, on_tick)?;
 
     match status.code() {
         // Robocopy exit codes 0..=7 indicate success (copied, extra, mismatched, or unchanged).
@@ -487,6 +569,16 @@ fn run_robocopy(
 }
 
 fn wait_child_with_cancel(child: &mut Child, cancel: &AtomicBool) -> Result<ExitStatus, String> {
+    wait_child_with_cancel_and_tick(child, cancel, |_| {})
+}
+
+fn wait_child_with_cancel_and_tick(
+    child: &mut Child,
+    cancel: &AtomicBool,
+    on_tick: impl Fn(Duration),
+) -> Result<ExitStatus, String> {
+    let start = Instant::now();
+    let mut last_tick = Instant::now();
     loop {
         if cancel.load(Ordering::Relaxed) {
             let _ = child.kill();
@@ -496,7 +588,13 @@ fn wait_child_with_cancel(child: &mut Child, cancel: &AtomicBool) -> Result<Exit
 
         match child.try_wait() {
             Ok(Some(status)) => return Ok(status),
-            Ok(None) => std::thread::sleep(CANCEL_POLL_INTERVAL),
+            Ok(None) => {
+                if last_tick.elapsed() >= Duration::from_millis(300) {
+                    on_tick(start.elapsed());
+                    last_tick = Instant::now();
+                }
+                std::thread::sleep(CANCEL_POLL_INTERVAL);
+            }
             Err(e) => {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -661,9 +759,9 @@ mod tests {
     }
 
     #[test]
-    fn default_targets_contains_all_seven_targets() {
+    fn default_targets_contains_all_nine_targets() {
         let targets = default_targets();
-        assert_eq!(targets.len(), 7);
+        assert_eq!(targets.len(), 9);
         let names: Vec<&str> = targets.iter().map(|t| t.name.as_str()).collect();
         assert_eq!(
             names,
@@ -675,13 +773,18 @@ mod tests {
                 "globalStorage",
                 "workspaceStorage",
                 "agyhub_summaries",
+                "conversation_summaries",
+                "antigravity_state",
             ]
         );
         assert!(targets[..6].iter().all(|t| t.is_dir));
-        assert!(!targets[6].is_dir);
+        assert!(targets[6..].iter().all(|t| !t.is_dir));
         assert!(targets[6]
             .local_path
             .ends_with("agyhub_summaries_proto.pb"));
+        assert!(targets[7]
+            .local_path
+            .ends_with("conversation_summaries.db"));
         assert!(targets.iter().all(|t| !t.label.is_empty() && !t.origin.is_empty()));
     }
 
@@ -719,7 +822,7 @@ mod tests {
         fs::write(remote_path_for(&sync_root, &targets[6]), b"123456").unwrap();
 
         let stats = scan_target_stats_for(&targets, &sync_root);
-        assert_eq!(stats.len(), 7);
+        assert_eq!(stats.len(), 9);
 
         assert_eq!(stats[0].name, "conversations");
         assert!(stats[0].local_exists && stats[0].remote_exists);

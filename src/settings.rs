@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// All 7 default Antigravity sync target names, in display/execution order.
-pub const DEFAULT_TARGET_NAMES: [&str; 7] = [
+/// All 9 default Antigravity sync target names, in display/execution order.
+pub const DEFAULT_TARGET_NAMES: [&str; 9] = [
     "conversations",
     "brain",
     "annotations",
@@ -11,6 +11,8 @@ pub const DEFAULT_TARGET_NAMES: [&str; 7] = [
     "globalStorage",
     "workspaceStorage",
     "agyhub_summaries",
+    "conversation_summaries",
+    "antigravity_state",
 ];
 
 /// Supported UI themes.
@@ -167,7 +169,7 @@ mod tests {
         assert_eq!(s.theme, "System");
         assert!(s.auto_relaunch);
         assert!(s.auto_check_updates);
-        assert_eq!(s.enabled_targets.len(), 7);
+        assert_eq!(s.enabled_targets.len(), 9);
         assert_eq!(
             s.enabled_targets,
             vec![
@@ -178,6 +180,8 @@ mod tests {
                 "globalStorage",
                 "workspaceStorage",
                 "agyhub_summaries",
+                "conversation_summaries",
+                "antigravity_state",
             ]
         );
     }
@@ -234,7 +238,7 @@ mod tests {
         assert_eq!(loaded.theme, "Dark Blue");
         assert!(!loaded.auto_relaunch);
         assert!(loaded.auto_check_updates);
-        assert_eq!(loaded.enabled_targets.len(), 7);
+        assert_eq!(loaded.enabled_targets.len(), 9);
 
         let invalid_theme_path = dir.join("invalid_theme.json");
         fs::write(&invalid_theme_path, r#"{"theme": "NeonGreen"}"#).expect("write invalid theme");
