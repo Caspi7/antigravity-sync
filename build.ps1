@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-$version = "2.1.3"
+$version = "2.1.4"
 $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 $cargo = "$env:USERPROFILE\.cargo\bin\cargo.exe"
 $mingwBin = (Get-ChildItem "$env:USERPROFILE\.gemini\antigravity\bin\llvm-mingw" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
@@ -41,11 +41,15 @@ $gz.Close()
 $outStream.Close()
 
 $iconPath = Join-Path $root "assets\AntigravitySync.ico"
+$pluginDir = Join-Path $root "plugin"
 Write-Host "Building AntigravitySync-Setup-v$version.exe..." -ForegroundColor Cyan
 & $csc /nologo /target:winexe /optimize /warnaserror `
     /win32icon:$iconPath `
     /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:Microsoft.CSharp.dll `
     /resource:"$appGz,AntigravitySync.exe.gz" `
+    /resource:"$pluginDir\plugin.json,plugin.json" `
+    /resource:"$pluginDir\package.json,package.json" `
+    /resource:"$pluginDir\server.mjs,server.mjs" `
     /out:$setupExe (Join-Path $root "src\Installer.cs")
 if ($LASTEXITCODE -ne 0) { throw "Failed to compile Setup" }
 

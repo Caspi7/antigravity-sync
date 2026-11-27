@@ -1,0 +1,8 @@
+{
+  "name": "antigravity-sync-mcp",
+  "version": "2.1.4",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0"
+  }
+}

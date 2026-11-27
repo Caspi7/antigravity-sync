@@ -13,10 +13,10 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Antigravity Sync Setup")]
-[assembly: AssemblyDescription("Installer for Antigravity Sync v2.1.3")]
-[assembly: AssemblyVersion("2.1.3.0")]
-[assembly: AssemblyFileVersion("2.1.3.0")]
-[assembly: AssemblyInformationalVersion("2.1.3")]
+[assembly: AssemblyDescription("Installer for Antigravity Sync v2.1.4")]
+[assembly: AssemblyVersion("2.1.4.0")]
+[assembly: AssemblyFileVersion("2.1.4.0")]
+[assembly: AssemblyInformationalVersion("2.1.4")]
 
 namespace AntigravitySyncSetup
 {
@@ -40,7 +40,7 @@ namespace AntigravitySyncSetup
 
     static class InstallerCore
     {
-        public const string AppVersion = "2.1.3";
+        public const string AppVersion = "2.1.4";
         public const string RepoOwner = "Caspi7";
         public const string RepoName = "antigravity-sync";
         public const string LatestReleaseApiUrl = "https://api.github.com/repos/" + RepoOwner + "/" + RepoName + "/releases/latest";
@@ -85,7 +85,10 @@ namespace AntigravitySyncSetup
                 CreateShortcut(Path.Combine(startMenu, "Antigravity Sync.lnk"), exePath, "", "Open Antigravity Sync");
             }
 
-            report(80, "Saving update preferences...");
+            report(80, "Updating Antigravity Sync plugin...");
+            InstallOrUpdatePlugin();
+
+            report(88, "Saving update preferences...");
             PersistAutoUpdatePreference(opts.AutoCheckUpdates);
 
             report(90, "Registering in Windows Apps & Features...");
@@ -102,6 +105,75 @@ namespace AntigravitySyncSetup
             }
 
             report(100, "Installation complete!");
+        }
+
+        private static void InstallOrUpdatePlugin()
+        {
+            try
+            {
+                string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                string configDir = Path.Combine(userProfile, @".gemini\config");
+                string pluginDir = Path.Combine(configDir, @"plugins\antigravity-sync");
+                Directory.CreateDirectory(pluginDir);
+
+                WriteEmbeddedTextResource("plugin.json", Path.Combine(pluginDir, "plugin.json"));
+                WriteEmbeddedTextResource("package.json", Path.Combine(pluginDir, "package.json"));
+                WriteEmbeddedTextResource("server.mjs", Path.Combine(pluginDir, "server.mjs"));
+
+                // Locate Antigravity's bundled node.exe & npm.cmd dynamically for this machine
+                string nodeRoot = Path.Combine(userProfile, @".gemini\antigravity\bin\node");
+                string nodeExe = "node";
+                string npmCmd = null;
+                if (Directory.Exists(nodeRoot))
+                {
+                    foreach (string dir in Directory.GetDirectories(nodeRoot))
+                    {
+                        string candidateNode = Path.Combine(dir, "node.exe");
+                        if (File.Exists(candidateNode))
+                        {
+                            nodeExe = candidateNode;
+                            string candidateNpm = Path.Combine(dir, "npm.cmd");
+                            if (File.Exists(candidateNpm)) npmCmd = candidateNpm;
+                            break;
+                        }
+                    }
+                }
+
+                string escapedNode = nodeExe.Replace("\\", "\\\\");
+                string escapedServer = Path.Combine(pluginDir, "server.mjs").Replace("\\", "\\\\");
+                string mcpJson = "{\n  \"mcpServers\": {\n    \"antigravity-sync\": {\n      \"command\": \"" + escapedNode + "\",\n      \"args\": [\n        \"" + escapedServer + "\"\n      ]\n    }\n  }\n}\n";
+                File.WriteAllText(Path.Combine(pluginDir, "mcp_config.json"), mcpJson, new UTF8Encoding(false));
+
+                // Install @modelcontextprotocol/sdk on fresh machines (e.g. Laptop) if missing
+                string sdkDir = Path.Combine(pluginDir, @"node_modules\@modelcontextprotocol\sdk");
+                if (!Directory.Exists(sdkDir) && !string.IsNullOrEmpty(npmCmd))
+                {
+                    var psi = new ProcessStartInfo(npmCmd, "install --omit=dev --no-audit --no-fund")
+                    {
+                        WorkingDirectory = pluginDir,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        WindowStyle = ProcessWindowStyle.Hidden
+                    };
+                    using (var proc = Process.Start(psi))
+                    {
+                        if (proc != null) proc.WaitForExit(60000);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static void WriteEmbeddedTextResource(string resourceName, string targetPath)
+        {
+            using (Stream res = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
+            {
+                if (res == null) return;
+                using (var fs = File.Create(targetPath))
+                {
+                    res.CopyTo(fs);
+                }
+            }
         }
 
         private static void PersistAutoUpdatePreference(bool autoCheckUpdates)

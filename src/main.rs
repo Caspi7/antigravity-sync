@@ -26,9 +26,9 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.1.3 — Fast Non-Destructive Sync & Clean Process Detection\n\n\
-• Eliminated multi-minute Push/Pull hangs: uses multi-threaded additive robocopy (/E /XO /MT:16) for large asset/storage folders, skips unchanged conversation DBs without re-running SQLite quick_check over Google Drive, removes the pre-sync Drive file-walk stall, and skips multi-GB cache folders in pre-Pull safety backups.\n\
-• Fixed false 'Antigravity is running' status when Antigravity.exe is closed (lingering language_server.exe is still stopped cleanly during sync without blocking the status badge).";
+Antigravity Sync v2.1.4 — Bundled Antigravity Plugin Auto-Update\n\n\
+• The Antigravity Sync plugin (~/.gemini/config/plugins/antigravity-sync) is now bundled inside Setup and automatically installed/updated whenever you install or update Antigravity Sync (including on your laptop).\n\
+• Updated the plugin to launch AntigravitySync.exe directly (--push/--pull --relaunch) instead of the legacy PowerShell script, and added an 'Open App' button inside the plugin panel.";
 
 struct AppState {
     settings: AppSettings,
