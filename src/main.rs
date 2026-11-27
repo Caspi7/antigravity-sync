@@ -7,7 +7,7 @@ mod updater;
 mod win32;
 
 use chrono::Local;
-use settings::{AppSettings, VALID_THEMES};
+use settings::AppSettings;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -26,9 +26,9 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.1.4 — Bundled Antigravity Plugin Auto-Update\n\n\
-• The Antigravity Sync plugin (~/.gemini/config/plugins/antigravity-sync) is now bundled inside Setup and automatically installed/updated whenever you install or update Antigravity Sync (including on your laptop).\n\
-• Updated the plugin to launch AntigravitySync.exe directly (--push/--pull --relaunch) instead of the legacy PowerShell script, and added an 'Open App' button inside the plugin panel.";
+Antigravity Sync v2.1.5 — Fluent SVG Icons & Consistent Theme Cycling\n\n\
+• Replaced Unicode glyph placeholders with crisp compile-time SVG icons across the command bar, Browse, Update, Release Notes, Help, and modal close buttons.\n\
+• Updated theme cycling to Light -> Dark -> Dark Blue -> Light (matching File Inventory) and ensured theme preferences persist across updates.";
 
 struct AppState {
     settings: AppSettings,
@@ -50,11 +50,11 @@ fn theme_str_to_mode(theme: &str) -> ThemeMode {
 }
 
 fn next_theme(current: &str) -> String {
-    let idx = VALID_THEMES
-        .iter()
-        .position(|&t| t.eq_ignore_ascii_case(current))
-        .unwrap_or(0);
-    VALID_THEMES[(idx + 1) % VALID_THEMES.len()].to_string()
+    match current.trim().to_ascii_lowercase().as_str() {
+        "light" => "Dark".to_string(),
+        "dark" => "Dark Blue".to_string(),
+        _ => "Light".to_string(),
+    }
 }
 
 fn format_bytes(bytes: u64, exists: bool) -> String {

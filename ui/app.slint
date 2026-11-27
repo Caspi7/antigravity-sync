@@ -65,7 +65,7 @@ export component MainWindow inherits Window {
     min-height: 540px;
     background: Palette.bg;
 
-    in property <string> app-version: "2.1.4";
+    in property <string> app-version: "2.1.5";
     in property <string> theme-label: "System";
     in-out property <string> sync-root: "G:\\My Drive\\AntigravitySync";
     in-out property <bool> auto-relaunch: true;
@@ -159,9 +159,9 @@ export component MainWindow inherits Window {
                         tab: true;
                         primary: true;
                         label: "Push";
-                        icon-text: "↑";
+                        icon: "push";
                         enabled: !root.is-busy;
-                        hint: "Mirror enabled local Antigravity targets to your cloud Sync Folder";
+                        hint: "Merge enabled local Antigravity targets to your cloud Sync Folder";
                         clicked => {
                             root.push-clicked();
                         }
@@ -174,9 +174,9 @@ export component MainWindow inherits Window {
                         tab: true;
                         tone: "teal";
                         label: "Pull";
-                        icon-text: "↓";
+                        icon: "pull";
                         enabled: !root.is-busy;
-                        hint: "Create safety backup and restore enabled targets from cloud Sync Folder";
+                        hint: "Create safety backup and merge enabled targets from cloud Sync Folder";
                         clicked => {
                             root.pull-clicked();
                         }
@@ -189,7 +189,7 @@ export component MainWindow inherits Window {
                         tab: true;
                         tone: "accent";
                         label: "Launch";
-                        icon-text: "▶";
+                        icon: "play";
                         enabled: !root.is-busy;
                         hint: "Launch Antigravity Desktop";
                         clicked => {
@@ -203,7 +203,7 @@ export component MainWindow inherits Window {
                     Action {
                         tab: true;
                         label: "Refresh";
-                        icon-text: "↻";
+                        icon: "refresh";
                         enabled: !root.is-busy;
                         hint: "Rescan local and Drive target sizes and sync status";
                         clicked => {
@@ -218,7 +218,7 @@ export component MainWindow inherits Window {
                         tab: true;
                         tone: "danger";
                         label: "Cancel";
-                        icon-text: "✕";
+                        icon: "close";
                         enabled: root.is-busy;
                         hint: "Cancel the currently running sync operation";
                         clicked => {
@@ -237,7 +237,7 @@ export component MainWindow inherits Window {
                         tab: true;
                         tone: "success";
                         label: root.latest-version != "" ? "Update v" + root.latest-version : "Update";
-                        icon-text: "★";
+                        icon: "update";
                         hint: "Update available — click to review release notes and install";
                         clicked => {
                             root.show-release-notes = true;
@@ -250,7 +250,7 @@ export component MainWindow inherits Window {
                     if !root.update-available: Action {
                         tab: true;
                         label: root.checking-updates ? "Checking..." : "Check Updates";
-                        icon-text: "↻";
+                        icon: "refresh";
                         enabled: !root.is-busy && !root.checking-updates;
                         hint: "Manually check GitHub Releases for a newer version";
                         clicked => {
@@ -263,10 +263,10 @@ export component MainWindow inherits Window {
 
                     Action {
                         tab: true;
-                        tone: "warning";
+                        icon: "theme";
+                        icon-tint: Palette.folder;
                         label: root.theme-label;
-                        icon-text: "☾";
-                        hint: "Switch theme (System, Light, Dark, Dark Blue)";
+                        hint: "Switch theme (Light -> Dark -> Dark Blue)";
                         clicked => {
                             root.cycle-theme();
                         }
@@ -277,6 +277,7 @@ export component MainWindow inherits Window {
 
                     Action {
                         tab: true;
+                        icon: "notes";
                         label: "Release Notes";
                         hint: "View version info, release notes, and updates";
                         clicked => {
@@ -289,7 +290,8 @@ export component MainWindow inherits Window {
 
                     Action {
                         tab: true;
-                        label: "?";
+                        icon: "help";
+                        icon-tint: Palette.drive;
                         horizontal-padding: 10px;
                         hint: "Open Antigravity Sync Guide (F1)";
                         clicked => {
@@ -392,6 +394,8 @@ export component MainWindow inherits Window {
 
                             Action {
                                 label: "Browse";
+                                icon: "folder";
+                                icon-tint: Palette.folder;
                                 height: 30px;
                                 enabled: !root.is-busy;
                                 hint: "Choose your cloud sync folder";

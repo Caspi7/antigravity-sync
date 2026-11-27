@@ -76,7 +76,7 @@ export component ReleaseNotesModal inherits Rectangle {
                     width: 28px;
                     height: 28px;
                     horizontal-padding: 7px;
-                    icon-text: "×";
+                    icon: "close";
                     hint: "Close";
                     clicked => {
                         root.close();
@@ -106,6 +106,7 @@ export component ReleaseNotesModal inherits Rectangle {
 
                     Action {
                         label: root.is-busy ? "Installing..." : "Download & Install";
+                        icon: "update";
                         primary: true;
                         enabled: !root.is-busy;
                         clicked => {
@@ -164,6 +165,7 @@ export component ReleaseNotesModal inherits Rectangle {
 
                 Action {
                     label: root.checking-updates ? "Checking..." : "Check for Updates";
+                    icon: "refresh";
                     height: 28px;
                     enabled: !root.is-busy && !root.checking-updates;
                     clicked => {

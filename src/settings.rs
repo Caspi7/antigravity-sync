@@ -158,6 +158,9 @@ fn default_enabled_targets() -> Vec<String> {
 
 fn normalize_theme(raw: &str) -> String {
     let trimmed = raw.trim();
+    if trimmed.eq_ignore_ascii_case("darkblue") {
+        return "Dark Blue".to_string();
+    }
     for valid in VALID_THEMES {
         if trimmed.eq_ignore_ascii_case(valid) {
             return valid.to_string();

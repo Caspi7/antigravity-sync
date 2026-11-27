@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const APP_URI = "ui://sync/app.html";
-const APP_VERSION = "2.1.4";
+const APP_VERSION = "2.1.5";
 
 function resolveSyncExe() {
   const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || "", "AppData", "Local");

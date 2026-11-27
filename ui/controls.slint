@@ -2,7 +2,9 @@ import { Palette } from "theme.slint";
 
 export component Action inherits Rectangle {
     in property <string> label;
+    in property <string> icon;
     in property <string> icon-text;
+    in property <color> icon-tint: Colors.transparent;
     in property <bool> primary: false;
     in property <bool> tab: false;
     in property <bool> enabled: true;
@@ -68,10 +70,36 @@ export component Action inherits Rectangle {
     HorizontalLayout {
         padding-left: root.horizontal-padding;
         padding-right: root.horizontal-padding;
-        spacing: (root.icon-text != "" && root.label != "") ? 5px : 0px;
+        spacing: ((root.icon != "" || root.icon-text != "") && root.label != "") ? 5px : 0px;
         alignment: center;
 
-        if root.icon-text != "": Text {
+        if root.icon != "": Image {
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+            source:
+                root.icon == "push" ? @image-url("icons/push.svg") :
+                root.icon == "pull" ? @image-url("icons/pull.svg") :
+                root.icon == "play" ? @image-url("icons/play.svg") :
+                root.icon == "refresh" ? @image-url("icons/refresh.svg") :
+                root.icon == "close" ? @image-url("icons/close.svg") :
+                root.icon == "update" ? @image-url("icons/update.svg") :
+                root.icon == "theme" ? @image-url("icons/theme.svg") :
+                root.icon == "notes" ? @image-url("icons/notes.svg") :
+                root.icon == "help" ? @image-url("icons/help.svg") :
+                root.icon == "folder" ? @image-url("icons/folder.svg") :
+                root.icon == "save" ? @image-url("icons/save.svg") :
+                root.icon == "check" ? @image-url("icons/check.svg") :
+                root.icon == "reset" ? @image-url("icons/reset.svg") :
+                @image-url("icons/external.svg");
+            colorize:
+                !root.enabled ? Palette.disabled-fg :
+                root.primary ? #ffffff :
+                root.icon-tint != Colors.transparent ? root.icon-tint :
+                root.is-toned ? root.tone-ink : Palette.fg;
+        }
+
+        if root.icon == "" && root.icon-text != "": Text {
             text: root.icon-text;
             font-size: 13px;
             vertical-alignment: center;
