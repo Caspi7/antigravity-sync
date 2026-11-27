@@ -82,9 +82,10 @@ pub fn is_windows_dark_mode() -> bool {
     false
 }
 
-pub fn is_antigravity_running() -> bool {
+pub fn is_process_running(image_name: &str) -> bool {
+    let filter = format!("IMAGENAME eq {image_name}");
     let Ok(output) = Command::new("tasklist")
-        .args(["/FI", "IMAGENAME eq Antigravity.exe", "/NH"])
+        .args(["/FI", &filter, "/NH"])
         .creation_flags(CREATE_NO_WINDOW)
         .output()
     else {
@@ -96,7 +97,13 @@ pub fn is_antigravity_running() -> bool {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout.to_ascii_lowercase().contains("antigravity.exe")
+    stdout
+        .to_ascii_lowercase()
+        .contains(&image_name.to_ascii_lowercase())
+}
+
+pub fn is_antigravity_running() -> bool {
+    is_process_running("Antigravity.exe") || is_process_running("language_server.exe")
 }
 
 pub fn antigravity_exe_path() -> Option<PathBuf> {

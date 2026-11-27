@@ -13,10 +13,10 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Antigravity Sync Setup")]
-[assembly: AssemblyDescription("Installer for Antigravity Sync v2.0.4")]
-[assembly: AssemblyVersion("2.0.4.0")]
-[assembly: AssemblyFileVersion("2.0.4.0")]
-[assembly: AssemblyInformationalVersion("2.0.4")]
+[assembly: AssemblyDescription("Installer for Antigravity Sync v2.0.5")]
+[assembly: AssemblyVersion("2.0.5.0")]
+[assembly: AssemblyFileVersion("2.0.5.0")]
+[assembly: AssemblyInformationalVersion("2.0.5")]
 
 namespace AntigravitySyncSetup
 {
@@ -40,7 +40,7 @@ namespace AntigravitySyncSetup
 
     static class InstallerCore
     {
-        public const string AppVersion = "2.0.4";
+        public const string AppVersion = "2.0.5";
         public const string RepoOwner = "Caspi7";
         public const string RepoName = "antigravity-sync";
         public const string LatestReleaseApiUrl = "https://api.github.com/repos/" + RepoOwner + "/" + RepoName + "/releases/latest";

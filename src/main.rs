@@ -25,10 +25,10 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.0.4 — File Inventory Visual Parity & Grid Fix\n\n\
-• Fixed the Target Data Grid not rendering rows inside the ScrollView (all 9 targets now display with zebra striping, semantic status pills, and Local/Drive sizes).\n\
-• Matched File Inventory's top command bar styling: subtle neutral tab borders with semantic icon accents and the warm gold moon (☾) Theme switcher button (System, Light, Dark, Dark Blue).\n\
-• Includes pure-Rust rustls auto-updater, Chat Index DB sync, faster Push (/FFT /MT:16 + cache exclusions), and live progress timer.";
+Antigravity Sync v2.0.5 — Reliable Chat Sync Fix (Language Server + SQLite WAL)\n\n\
+• Gracefully stops both Antigravity.exe and language_server.exe (with /F /T fallback) before Push & Pull so SQLite databases flush cleanly and are never locked or overwritten.\n\
+• Mirrors SQLite -wal/-shm sidecar files for conversations and conversation_summaries.db (and cleans stale sidecars when absent) so recent chats are never lost on Push or Pull.\n\
+• Automatically migrates older v2.0.0/v2.0.1 settings.json files to enable Chat Index DB (conversation_summaries) and Antigravity State so pulled chats always appear in the sidebar.";
 
 struct AppState {
     settings: AppSettings,

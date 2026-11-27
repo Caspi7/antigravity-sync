@@ -363,12 +363,11 @@ fn run_sync_impl(
             log_line: Some(format!("[{}] Syncing {} ({}/{})...", mode.label(), target.label, target_num, target_count)),
         });
 
-        // Clean stale SQLite WAL/SHM files before pulling Chat Index DB so Antigravity imports chats cleanly
+        // Clean stale local SQLite WAL/SHM files before pulling Chat Index DB
         if mode == SyncMode::Pull && target.name == "conversation_summaries" {
-            let wal = dst.with_file_name("conversation_summaries.db-wal");
-            let shm = dst.with_file_name("conversation_summaries.db-shm");
-            let _ = fs::remove_file(wal);
-            let _ = fs::remove_file(shm);
+            for suffix in ["conversation_summaries.db-wal", "conversation_summaries.db-shm"] {
+                let _ = fs::remove_file(dst.with_file_name(suffix));
+            }
         }
 
         run_robocopy_with_tick(src, dst, target.is_dir, &cancel, |elapsed| {
@@ -388,6 +387,19 @@ fn run_sync_impl(
                 log_line: None,
             });
         })?;
+
+        // Mirror SQLite WAL/SHM sidecar files for Chat Index DB so uncheckpointed writes are never lost
+        if target.name == "conversation_summaries" {
+            for suffix in ["conversation_summaries.db-wal", "conversation_summaries.db-shm"] {
+                let side_src = src.with_file_name(suffix);
+                let side_dst = dst.with_file_name(suffix);
+                if side_src.is_file() {
+                    let _ = run_robocopy(&side_src, &side_dst, false, &cancel);
+                } else if side_dst.is_file() {
+                    let _ = fs::remove_file(&side_dst);
+                }
+            }
+        }
         synced_count += 1;
 
         done_weight += weights[idx];
@@ -433,9 +445,9 @@ fn run_sync_impl(
     Ok(summary)
 }
 
-fn close_antigravity(cancel: &AtomicBool) -> Result<bool, String> {
+fn run_taskkill(args: &[&str], cancel: &AtomicBool) -> Result<bool, String> {
     let mut cmd = Command::new("taskkill");
-    cmd.args(["/F", "/IM", "Antigravity.exe"])
+    cmd.args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -446,6 +458,37 @@ fn close_antigravity(cancel: &AtomicBool) -> Result<bool, String> {
         .map_err(|e| format!("Failed to launch taskkill: {e}"))?;
     let status = wait_child_with_cancel(&mut child, cancel)?;
     Ok(status.success())
+}
+
+fn wait_for_process_exit(image_name: &str, timeout: Duration, cancel: &AtomicBool) -> Result<bool, String> {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        check_cancelled(cancel)?;
+        if !crate::win32::is_process_running(image_name) {
+            return Ok(true);
+        }
+        sleep_with_cancel(CANCEL_POLL_INTERVAL, cancel)?;
+    }
+    Ok(!crate::win32::is_process_running(image_name))
+}
+
+fn stop_process_gracefully(image_name: &str, grace: Duration, cancel: &AtomicBool) -> Result<bool, String> {
+    if !crate::win32::is_process_running(image_name) {
+        return Ok(false);
+    }
+    // Ask process to close gracefully first so SQLite can checkpoint WAL journals cleanly.
+    let _ = run_taskkill(&["/IM", image_name], cancel)?;
+    if !wait_for_process_exit(image_name, grace, cancel)? {
+        let _ = run_taskkill(&["/F", "/T", "/IM", image_name], cancel)?;
+        let _ = wait_for_process_exit(image_name, Duration::from_millis(1200), cancel)?;
+    }
+    Ok(true)
+}
+
+fn close_antigravity(cancel: &AtomicBool) -> Result<bool, String> {
+    let closed_ui = stop_process_gracefully("Antigravity.exe", Duration::from_millis(2500), cancel)?;
+    let closed_ls = stop_process_gracefully("language_server.exe", Duration::from_millis(1200), cancel)?;
+    Ok(closed_ui || closed_ls)
 }
 
 fn create_backup(
@@ -522,7 +565,7 @@ fn run_robocopy_with_tick(
                 "/MIR", "/FFT", "/MT:16", "/R:1", "/W:1", "/NFL", "/NDL", "/NP", "/NJH", "/NJS",
                 "/XD", "cache", "Cache", "Code Cache", "GPUCache", "CachedData", "Crashpad",
                 "logs", ".system_generated", "browser_sandbox", "temp", "tmp", "__pycache__", "node_modules",
-                "/XF", "*.log", "*.tmp", "*.bak", "*-wal", "*-shm",
+                "/XF", "*.log", "*.tmp", "*.bak",
             ]);
     } else {
         let src_dir = src.parent().ok_or_else(|| {

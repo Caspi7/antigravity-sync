@@ -21,9 +21,14 @@ pub const VALID_THEMES: [&str; 4] = ["System", "Light", "Dark", "Dark Blue"];
 const DEFAULT_SYNC_ROOT: &str = r"G:\My Drive\AntigravitySync";
 const DEFAULT_THEME: &str = "System";
 
+/// Current settings schema version for one-time migrations (e.g. adding new default targets).
+pub const SETTINGS_SCHEMA_VERSION: u32 = 2;
+
 /// Persistent user configuration stored in `%APPDATA%\AntigravitySync\settings.json`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AppSettings {
+    #[serde(default)]
+    pub schema_version: u32,
     #[serde(default = "default_sync_root", alias = "SyncRoot")]
     pub sync_root: String,
     #[serde(default = "default_theme", alias = "Theme")]
@@ -39,6 +44,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            schema_version: SETTINGS_SCHEMA_VERSION,
             sync_root: default_sync_root(),
             theme: default_theme(),
             auto_relaunch: true,
@@ -77,6 +83,22 @@ impl AppSettings {
         };
 
         settings.theme = normalize_theme(&settings.theme);
+
+        // One-time migration for upgrades from v2.0.0/v2.0.1 (which only had 7 targets):
+        // auto-enable Chat Index DB & Antigravity State so pulled chats show up in the sidebar.
+        if settings.schema_version < SETTINGS_SCHEMA_VERSION {
+            for required in ["conversation_summaries", "antigravity_state"] {
+                if !settings
+                    .enabled_targets
+                    .iter()
+                    .any(|t| t.eq_ignore_ascii_case(required))
+                {
+                    settings.enabled_targets.push(required.to_string());
+                }
+            }
+            settings.schema_version = SETTINGS_SCHEMA_VERSION;
+        }
+
         settings
     }
 
@@ -113,7 +135,9 @@ impl AppSettings {
 }
 
 fn settings_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|dir| dir.join("AntigravitySync").join("settings.json"))
+    dirs::config_dir()
+        .or_else(|| std::env::var_os("APPDATA").map(PathBuf::from))
+        .map(|dir| dir.join("AntigravitySync").join("settings.json"))
 }
 
 fn default_sync_root() -> String {
@@ -192,6 +216,7 @@ mod tests {
         let path = dir.join("AntigravitySync").join("settings.json");
 
         let custom = AppSettings {
+            schema_version: SETTINGS_SCHEMA_VERSION,
             sync_root: r"D:\Cloud\AntigravitySync".to_string(),
             theme: "Dark Blue".to_string(),
             auto_relaunch: false,
@@ -261,5 +286,26 @@ mod tests {
                 .and_then(|n| n.to_str()),
             Some("AntigravitySync")
         );
+    }
+
+    #[test]
+    fn legacy_seven_target_settings_auto_enables_chat_index_db() {
+        let dir = unique_temp_dir("migrate");
+        let path = dir.join("settings.json");
+        let old_json = r#"{
+  "sync_root": "G:\\My Drive\\AntigravitySync",
+  "theme": "Dark",
+  "auto_relaunch": true,
+  "auto_check_updates": true,
+  "enabled_targets": ["conversations", "brain", "annotations", "config", "globalStorage", "workspaceStorage", "agyhub_summaries"]
+}"#;
+        fs::write(&path, old_json).expect("write legacy 7-target settings");
+
+        let loaded = AppSettings::load_from_path(&path);
+        assert_eq!(loaded.schema_version, SETTINGS_SCHEMA_VERSION);
+        assert!(loaded.enabled_targets.iter().any(|t| t == "conversation_summaries"));
+        assert!(loaded.enabled_targets.iter().any(|t| t == "antigravity_state"));
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
