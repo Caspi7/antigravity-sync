@@ -25,12 +25,11 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.0.2 — Auto-Import Chats, Faster Push & Live Progress\n\n\
-• Added Chat Index DB (conversation_summaries.db) and Antigravity State (antigravity_state.pbtxt) so pulled chats automatically appear in Antigravity's sidebar.\n\
-• Automatically clears stale SQLite -wal/-shm files on Pull for clean chat import.\n\
-• Much faster Push & cleaner Drive folder: added robocopy /FFT /MT:16 and excluded temporary caches, logs, browser_sandbox, and .system_generated folders, plus writes a sync_manifest.json summary.\n\
-• Live elapsed timer & smooth progress updates every 300ms during sync so the app never looks frozen.\n\
-• Manual Check Updates button and File Inventory-style Fluent installer with automatic GitHub version checking.";
+Antigravity Sync v2.0.3 — Reliable TLS Update Check\n\n\
+• Switched the built-in GitHub updater from Windows native-tls to pure-Rust rustls (fixes 'Update check failed' on Windows).\n\
+• Includes Chat Index DB (conversation_summaries.db) & Antigravity State sync for automatic chat import.\n\
+• Fast Push (/FFT /MT:16 + cache/temp/log exclusions + sync_manifest.json) and live 300ms progress timer.\n\
+• Manual Check Updates button and File Inventory-style Fluent installer.";
 
 struct AppState {
     settings: AppSettings,
