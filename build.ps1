@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-$version = "2.2.2"
+$version = "2.2.3"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dist = Join-Path $root "dist"
 
