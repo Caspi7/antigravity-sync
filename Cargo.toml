@@ -1,6 +1,6 @@
 [package]
 name = "antigravity-sync"
-version = "2.0.3"
+version = "2.0.4"
 edition = "2021"
 description = "Fluent Windows 11 desktop utility & launcher to sync Antigravity across machines"
 license = "MIT"

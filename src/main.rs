@@ -25,11 +25,10 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.0.3 — Reliable TLS Update Check\n\n\
-• Switched the built-in GitHub updater from Windows native-tls to pure-Rust rustls (fixes 'Update check failed' on Windows).\n\
-• Includes Chat Index DB (conversation_summaries.db) & Antigravity State sync for automatic chat import.\n\
-• Fast Push (/FFT /MT:16 + cache/temp/log exclusions + sync_manifest.json) and live 300ms progress timer.\n\
-• Manual Check Updates button and File Inventory-style Fluent installer.";
+Antigravity Sync v2.0.4 — File Inventory Visual Parity & Grid Fix\n\n\
+• Fixed the Target Data Grid not rendering rows inside the ScrollView (all 9 targets now display with zebra striping, semantic status pills, and Local/Drive sizes).\n\
+• Matched File Inventory's top command bar styling: subtle neutral tab borders with semantic icon accents and the warm gold moon (☾) Theme switcher button (System, Light, Dark, Dark Blue).\n\
+• Includes pure-Rust rustls auto-updater, Chat Index DB sync, faster Push (/FFT /MT:16 + cache exclusions), and live progress timer.";
 
 struct AppState {
     settings: AppSettings,

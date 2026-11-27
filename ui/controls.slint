@@ -44,7 +44,6 @@ export component Action inherits Rectangle {
         !root.enabled ? Palette.border :
         fs.has-focus ? Palette.accent :
         root.primary ? (ta.pressed ? Palette.accent-pressed : (ta.has-hover ? Palette.accent-hover : Palette.accent)) :
-        root.is-toned ? root.tone-ink :
         (ta.has-hover ? Palette.border-strong : Palette.border);
 
     forward-focus: fs;

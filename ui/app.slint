@@ -64,7 +64,7 @@ export component MainWindow inherits Window {
     min-height: 540px;
     background: Palette.bg;
 
-    in property <string> app-version: "2.0.3";
+    in property <string> app-version: "2.0.4";
     in property <string> theme-label: "System";
     in-out property <string> sync-root: "G:\\My Drive\\AntigravitySync";
     in-out property <bool> auto-relaunch: true;
@@ -262,9 +262,10 @@ export component MainWindow inherits Window {
 
                     Action {
                         tab: true;
+                        tone: "warning";
                         label: root.theme-label;
-                        icon-text: "◐";
-                        hint: "Cycle theme mode (System, Light, Dark, Dark Blue)";
+                        icon-text: "☾";
+                        hint: "Switch theme (System, Light, Dark, Dark Blue)";
                         clicked => {
                             root.cycle-theme();
                         }
@@ -664,12 +665,13 @@ export component MainWindow inherits Window {
                                 grid-sv := ScrollView {
                                     vertical-stretch: 1;
                                     viewport-width: self.visible-width;
-                                    viewport-height: max(self.visible-height, grid-rows.preferred-height);
+                                    viewport-height: max(self.visible-height, root.targets.length * 29px);
 
                                     grid-rows := VerticalLayout {
                                         x: 0px;
                                         y: 0px;
                                         width: grid-sv.visible-width;
+                                        height: max(grid-sv.visible-height, root.targets.length * 29px);
                                         spacing: 0px;
                                         alignment: start;
 
