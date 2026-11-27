@@ -1,0 +1,284 @@
+import { ScrollView } from "std-widgets.slint";
+import { Palette } from "theme.slint";
+import { Action, SemanticPill } from "controls.slint";
+
+component GuideCard inherits Rectangle {
+    in property <string> heading;
+    in property <string> badge-text;
+    in property <string> badge-tone: "drive";
+    in property <string> body;
+    in property <string> note;
+
+    background: Palette.surface;
+    border-width: 1px;
+    border-color: Palette.border;
+    border-radius: 7px;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 6px;
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+
+            Text {
+                text: root.heading;
+                font-size: 14px;
+                font-weight: 600;
+                color: Palette.fg;
+                vertical-alignment: center;
+                wrap: word-wrap;
+            }
+
+            if root.badge-text != "": VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 0;
+                SemanticPill {
+                    text: root.badge-text;
+                    tone: root.badge-tone;
+                }
+            }
+        }
+
+        Text {
+            text: root.body;
+            font-size: 13px;
+            color: Palette.fg;
+            wrap: word-wrap;
+        }
+
+        if root.note != "": Text {
+            text: root.note;
+            font-size: 12.5px;
+            color: Palette.accent;
+            wrap: word-wrap;
+        }
+    }
+}
+
+export component HelpGuideModal inherits Rectangle {
+    callback close();
+
+    private property <int> active-tab: 0;
+
+    background: #00000088;
+
+    TouchArea {
+        width: 100%;
+        height: 100%;
+        clicked => {
+            root.close();
+        }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(parent.width - 36px, 860px);
+        height: min(parent.height - 36px, 580px);
+        background: Palette.surface;
+        border-radius: 9px;
+        border-width: 1px;
+        border-color: Palette.border-strong;
+        clip: true;
+
+        TouchArea {
+            width: 100%;
+            height: 100%;
+        }
+
+        VerticalLayout {
+            padding: 15px;
+            spacing: 10px;
+
+            HorizontalLayout {
+                height: 28px;
+                spacing: 8px;
+
+                Text {
+                    text: "Antigravity Sync Guide";
+                    font-size: 21px;
+                    font-weight: 600;
+                    color: Palette.fg;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+
+                Action {
+                    width: 28px;
+                    height: 28px;
+                    horizontal-padding: 7px;
+                    icon-text: "×";
+                    hint: "Close";
+                    clicked => {
+                        root.close();
+                    }
+                }
+            }
+
+            VerticalLayout {
+                vertical-stretch: 1;
+                spacing: 0px;
+
+                HorizontalLayout {
+                    spacing: 4px;
+                    alignment: start;
+
+                    Action {
+                        tab: true;
+                        label: "Overview";
+                        primary: root.active-tab == 0;
+                        clicked => {
+                            root.active-tab = 0;
+                            sv.viewport-y = 0px;
+                        }
+                    }
+
+                    Action {
+                        tab: true;
+                        label: "Sync & Backup";
+                        primary: root.active-tab == 1;
+                        clicked => {
+                            root.active-tab = 1;
+                            sv.viewport-y = 0px;
+                        }
+                    }
+
+                    Action {
+                        tab: true;
+                        label: "Launcher & Updates";
+                        primary: root.active-tab == 2;
+                        clicked => {
+                            root.active-tab = 2;
+                            sv.viewport-y = 0px;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    vertical-stretch: 1;
+                    background: Palette.surface-alt;
+                    border-width: 1px;
+                    border-color: Palette.border;
+                    border-radius: 7px;
+                    clip: true;
+
+                    VerticalLayout {
+                        padding: 18px;
+                        spacing: 12px;
+
+                        Text {
+                            text: root.active-tab == 0 ? "Keep Antigravity in sync across machines" :
+                                  root.active-tab == 1 ? "Push, Pull & automatic safety backups" :
+                                  "Desktop shortcuts & SHA-256 auto-updates";
+                            font-size: 20px;
+                            font-weight: 600;
+                            color: Palette.fg;
+                            wrap: word-wrap;
+                        }
+
+                        sv := ScrollView {
+                            vertical-stretch: 1;
+                            viewport-width: self.visible-width;
+                            viewport-height: max(self.visible-height, inner.preferred-height + 16px);
+
+                            inner := VerticalLayout {
+                                x: 0px;
+                                y: 0px;
+                                width: sv.visible-width;
+                                spacing: 10px;
+                                alignment: start;
+
+                                if root.active-tab == 0: VerticalLayout {
+                                    spacing: 10px;
+
+                                    GuideCard {
+                                        heading: "Synced Antigravity Data Targets";
+                                        badge-text: "7 Targets";
+                                        badge-tone: "drive";
+                                        body: "Antigravity Sync mirrors Conversations, Brain Artifacts, Annotations, Config & Skills, Global Storage, Workspace Storage, and AgyHub Summaries between this PC and your cloud sync folder.";
+                                        note: "Use the sidebar checkboxes to choose which targets are active during Push and Pull.";
+                                    }
+
+                                    GuideCard {
+                                        heading: "Cloud Sync Folder & Settings";
+                                        badge-text: "Cloud Drive";
+                                        badge-tone: "teal";
+                                        body: "Point Sync Folder to any synced drive location (such as Google Drive, OneDrive, or Dropbox). Your folder path, theme choice, enabled targets, and launcher preferences are saved in %APPDATA%\\AntigravitySync\\settings.json.";
+                                        note: "Default Sync Folder: G:\\My Drive\\AntigravitySync";
+                                    }
+
+                                    GuideCard {
+                                        heading: "Live Status Grid & Themes";
+                                        badge-text: "Fluent UI";
+                                        badge-tone: "success";
+                                        body: "Click any column header (Target, Status, Local, Drive) to sort targets, click any row to inspect its full local path in the sidebar, and cycle between System, Light, Dark, and Dark Blue themes from the command bar.";
+                                        note: "Shortcuts: Press F1 to toggle this guide, or Esc to close any open modal.";
+                                    }
+                                }
+
+                                if root.active-tab == 1: VerticalLayout {
+                                    spacing: 10px;
+
+                                    GuideCard {
+                                        heading: "Push (This PC → Cloud Drive)";
+                                        badge-text: "Push";
+                                        badge-tone: "drive";
+                                        body: "Closes Antigravity cleanly if it is currently running, mirrors all enabled local targets into your Sync Folder using robocopy with zero console flashes, and optionally relaunches Antigravity when finished.";
+                                        note: "Use Push before switching to another computer so your latest sessions and settings are uploaded.";
+                                    }
+
+                                    GuideCard {
+                                        heading: "Pull (Cloud Drive → This PC)";
+                                        badge-text: "Pull";
+                                        badge-tone: "teal";
+                                        body: "Closes Antigravity if running, creates an automatic safety backup of your local data, mirrors enabled targets from the cloud Sync Folder onto this machine, and relaunches Antigravity if Auto-relaunch is enabled.";
+                                        note: "Targets not yet present in the Sync Folder are safely skipped without wiping local files.";
+                                    }
+
+                                    GuideCard {
+                                        heading: "Automatic Safety Backups";
+                                        badge-text: "Before Pull";
+                                        badge-tone: "warning";
+                                        body: "Before modifying local files on Pull, Antigravity Sync automatically snapshots all enabled local targets into a timestamped backup folder so you can restore an earlier state at any time.";
+                                        note: "Backup path: %USERPROFILE%\\.gemini\\antigravity_backup_YYYYMMDD_HHMMSS";
+                                    }
+                                }
+
+                                if root.active-tab == 2: VerticalLayout {
+                                    spacing: 10px;
+
+                                    GuideCard {
+                                        heading: "Desktop Shortcuts (--push / --pull)";
+                                        badge-text: "One-Click CLI";
+                                        badge-tone: "imported";
+                                        body: "The installer creates three Desktop shortcuts: Antigravity Sync (opens the UI), Push Antigravity (runs --push --relaunch), and Pull Antigravity (runs --pull --relaunch) for instant automated workflows.";
+                                        note: "CLI flags: AntigravitySync.exe --push --relaunch  |  --pull --relaunch";
+                                    }
+
+                                    GuideCard {
+                                        heading: "Process Lock Protection & Auto-Relaunch";
+                                        badge-text: "Safe Sync";
+                                        badge-tone: "drive";
+                                        body: "The live status pill monitors whether Antigravity.exe is running. Before copying, Antigravity is closed so SQLite databases and protobuf files are never half-written, then restarted automatically when Auto-relaunch is checked.";
+                                        note: "Use Launch in the top command bar anytime to start Antigravity manually.";
+                                    }
+
+                                    GuideCard {
+                                        heading: "SHA-256 Verified Auto-Updates";
+                                        badge-text: "GitHub Releases";
+                                        badge-tone: "success";
+                                        body: "When update checks are enabled, startup queries GitHub Releases for newer versions. Clicking Download & Install downloads the setup executable, verifies its SHA-256 checksum against SHA256SUMS.txt, and applies a silent upgrade.";
+                                        note: "Downloads that fail SHA-256 verification are immediately deleted and aborted.";
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

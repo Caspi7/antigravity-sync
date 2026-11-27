@@ -1,0 +1,177 @@
+import { Palette } from "theme.slint";
+
+export component Action inherits Rectangle {
+    in property <string> label;
+    in property <string> icon-text;
+    in property <bool> primary: false;
+    in property <bool> tab: false;
+    in property <bool> enabled: true;
+    in property <string> tone: "default";
+    in property <string> hint;
+    in property <length> horizontal-padding: 10px;
+
+    callback clicked();
+    callback hovered(string);
+
+    private property <bool> is-toned: root.tone != "default" && root.tone != "";
+    private property <color> tone-ink:
+        root.tone == "success" ? Palette.success :
+        root.tone == "warning" ? Palette.warning :
+        root.tone == "danger" ? Palette.danger :
+        root.tone == "accent" ? Palette.accent :
+        root.tone == "teal" ? Palette.teal : Palette.fg;
+    private property <color> tone-bg:
+        root.tone == "success" ? Palette.success-bg :
+        root.tone == "warning" ? Palette.warning-bg :
+        root.tone == "danger" ? Palette.danger-bg :
+        root.tone == "teal" ? Palette.teal-bg : Palette.surface-hover;
+
+    height: root.tab ? 36px : 30px;
+    horizontal-stretch: 0;
+    border-width: 1px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-left-radius: root.tab ? 0px : 6px;
+    border-bottom-right-radius: root.tab ? 0px : 6px;
+
+    background:
+        !root.enabled ? Palette.surface-readonly :
+        root.primary ? (ta.pressed ? Palette.accent-pressed : (ta.has-hover ? Palette.accent-hover : Palette.accent)) :
+        root.is-toned ? (ta.pressed ? Palette.surface-pressed : (ta.has-hover ? root.tone-bg : Palette.surface)) :
+        (ta.pressed ? Palette.surface-pressed : (ta.has-hover ? Palette.surface-hover : Palette.surface));
+
+    border-color:
+        !root.enabled ? Palette.border :
+        fs.has-focus ? Palette.accent :
+        root.primary ? (ta.pressed ? Palette.accent-pressed : (ta.has-hover ? Palette.accent-hover : Palette.accent)) :
+        root.is-toned ? root.tone-ink :
+        (ta.has-hover ? Palette.border-strong : Palette.border);
+
+    forward-focus: fs;
+    accessible-role: button;
+    accessible-label: root.label != "" ? root.label : root.hint;
+    accessible-enabled: root.enabled;
+
+    fs := FocusScope {
+        enabled: root.enabled;
+        width: 100%;
+        height: 100%;
+
+        key-pressed(event) => {
+            if (root.enabled && (event.text == Key.Return || event.text == Key.Space)) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: root.horizontal-padding;
+        padding-right: root.horizontal-padding;
+        spacing: (root.icon-text != "" && root.label != "") ? 5px : 0px;
+        alignment: center;
+
+        if root.icon-text != "": Text {
+            text: root.icon-text;
+            font-size: 13px;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+            color: !root.enabled ? Palette.disabled-fg :
+                   root.primary ? #ffffff :
+                   root.is-toned ? root.tone-ink : Palette.fg;
+        }
+
+        if root.label != "": Text {
+            text: root.label;
+            font-size: 13px;
+            font-weight: root.primary ? 600 : 400;
+            vertical-alignment: center;
+            color: !root.enabled ? Palette.disabled-fg :
+                   root.primary ? #ffffff : Palette.fg;
+        }
+    }
+
+    ta := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: root.enabled ? pointer : default;
+
+        clicked => {
+            if (root.enabled) {
+                root.clicked();
+            }
+        }
+
+        changed has-hover => {
+            root.hovered(self.has-hover ? root.hint : "");
+        }
+    }
+}
+
+export component SemanticPill inherits Rectangle {
+    in property <string> text;
+    in property <string> tone: "drive";
+    in property <bool> dot: false;
+    in property <bool> inverted: false;
+
+    private property <color> pill-ink:
+        root.tone == "success" ? Palette.success :
+        root.tone == "warning" ? Palette.warning :
+        root.tone == "danger" ? Palette.danger :
+        root.tone == "teal" ? Palette.teal :
+        root.tone == "imported" ? Palette.imported : Palette.drive;
+
+    private property <color> pill-bg:
+        root.tone == "success" ? Palette.success-bg :
+        root.tone == "warning" ? Palette.warning-bg :
+        root.tone == "danger" ? Palette.danger-bg :
+        root.tone == "teal" ? Palette.teal-bg :
+        root.tone == "imported" ? Palette.imported-bg : Palette.drive-bg;
+
+    height: 22px;
+    horizontal-stretch: 0;
+    border-radius: 11px;
+    background: root.inverted ? transparent : root.pill-bg;
+
+    if root.dot: Rectangle {
+        x: 8px;
+        y: (parent.height - self.height) / 2;
+        width: 6px;
+        height: 6px;
+        border-radius: 3px;
+        background: root.inverted ? #ffffff : root.pill-ink;
+    }
+
+    HorizontalLayout {
+        padding-left: root.dot ? 21px : 8px;
+        padding-right: 8px;
+        alignment: center;
+
+        Text {
+            text: root.text;
+            font-size: 12px;
+            font-weight: 600;
+            vertical-alignment: center;
+            color: root.inverted ? #ffffff : root.pill-ink;
+        }
+    }
+}
+
+export component Meter inherits Rectangle {
+    in property <float> progress: 0.0;
+
+    height: 5px;
+    border-radius: 3px;
+    background: Palette.track-bg;
+    clip: true;
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        height: parent.height;
+        width: parent.width * max(0.0, min(1.0, root.progress));
+        border-radius: parent.border-radius;
+        background: Palette.accent;
+    }
+}

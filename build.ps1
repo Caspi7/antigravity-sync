@@ -1,21 +1,36 @@
 $ErrorActionPreference = "Stop"
-$version = "1.0.1"
+$version = "2.0.0"
 $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+$cargo = "$env:USERPROFILE\.cargo\bin\cargo.exe"
+$mingwBin = (Get-ChildItem "$env:USERPROFILE\.gemini\antigravity\bin\llvm-mingw" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+if ($mingwBin) { $env:PATH = "$mingwBin\bin;$env:PATH" }
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dist = Join-Path $root "dist"
+
+Push-Location $root
+try {
+    Write-Host "Running unit tests (0 warnings)..." -ForegroundColor Cyan
+    $env:RUSTFLAGS = "-D warnings -C link-self-contained=yes"
+    & $cargo test
+    if ($LASTEXITCODE -ne 0) { throw "cargo test failed" }
+
+    Write-Host "Building Rust + Slint Release binary v$version..." -ForegroundColor Cyan
+    & $cargo build --release
+    if ($LASTEXITCODE -ne 0) { throw "cargo build --release failed" }
+} finally {
+    Pop-Location
+}
 
 if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
 
-$appExe = Join-Path $dist "AntigravitySync.exe"
-$appGz  = Join-Path $dist "AntigravitySync.exe.gz"
+$builtExe = Join-Path $root "target\release\AntigravitySync.exe"
+$appExe   = Join-Path $dist "AntigravitySync.exe"
+$appGz    = Join-Path $dist "AntigravitySync.exe.gz"
 $setupExe = Join-Path $dist "AntigravitySync-Setup-v$version.exe"
 
-Write-Host "Building AntigravitySync.exe v$version..." -ForegroundColor Cyan
-& $csc /nologo /target:winexe /optimize /warnaserror `
-    /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:Microsoft.CSharp.dll `
-    /out:$appExe (Join-Path $root "src\AntigravitySync.cs")
-if ($LASTEXITCODE -ne 0) { throw "Failed to compile AntigravitySync.exe" }
+Copy-Item $builtExe $appExe -Force
 
 Write-Host "Compressing payload..." -ForegroundColor Cyan
 $inBytes = [System.IO.File]::ReadAllBytes($appExe)

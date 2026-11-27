@@ -1,0 +1,53 @@
+import { Palette as WidgetPalette } from "std-widgets.slint";
+
+export enum ThemeMode { System, Light, Dark, DarkBlue }
+
+export global Palette {
+    in property <ThemeMode> mode: ThemeMode.System;
+    in property <bool> system-dark: true;
+
+    out property <bool> dark: mode == ThemeMode.Dark || mode == ThemeMode.DarkBlue || (mode == ThemeMode.System && system-dark);
+    out property <bool> dark-blue: mode == ThemeMode.DarkBlue;
+
+    changed dark => {
+        WidgetPalette.color-scheme = self.dark ? ColorScheme.dark : ColorScheme.light;
+    }
+
+    // Core canvas & surface tokens
+    out property <color> bg: dark-blue ? #0f172a : (dark ? #202022 : #f3f3f5);
+    out property <color> surface: dark-blue ? #18233a : (dark ? #2b2b2e : #ffffff);
+    out property <color> surface-readonly: dark-blue ? #131d31 : (dark ? #262629 : #f9f9fb);
+    out property <color> surface-alt: dark-blue ? #1e2942 : (dark ? #303034 : #fcfcfd);
+    out property <color> surface-hover: dark-blue ? #263552 : (dark ? #3a3a3f : #f2f4f8);
+    out property <color> surface-pressed: dark-blue ? #141e32 : (dark ? #28282c : #e8ebf0);
+    out property <color> header-bg: dark-blue ? #141f34 : (dark ? #26262a : #f6f7fa);
+
+    // Typography & foreground tokens
+    out property <color> fg: dark-blue ? #e2e8f0 : (dark ? #f4f4f6 : #18181b);
+    out property <color> muted: dark-blue ? #94a3b8 : (dark ? #a6a8b2 : #60626c);
+    out property <color> disabled-fg: dark-blue ? #64748b : (dark ? #767880 : #9496a0);
+
+    // Borders & primary accent tokens
+    out property <color> border: dark-blue ? #33415c : (dark ? #44444b : #d6d8e0);
+    out property <color> border-strong: dark-blue ? #475878 : (dark ? #5c5c66 : #bcbfca);
+    out property <color> accent: dark-blue ? #007acc : (dark ? #0078d4 : #0067c0);
+    out property <color> accent-hover: dark-blue ? #1c97ea : (dark ? #1a8ae2 : #1676c9);
+    out property <color> accent-pressed: dark-blue ? #0062a8 : (dark ? #0066b8 : #00549e);
+    out property <color> track-bg: dark-blue ? #26344e : (dark ? #38383e : #e0e2e8);
+
+    // Semantic accents
+    out property <color> folder: dark-blue ? #facc15 : (dark ? #f5c542 : #eab308);
+    out property <color> folder-stroke: dark-blue ? #ca8a04 : (dark ? #c48b10 : #b45309);
+    out property <color> drive: dark-blue ? #38bdf8 : (dark ? #38bdf8 : #0284c7);
+    out property <color> drive-bg: dark-blue ? #152c44 : (dark ? #152c44 : #e0f2fe);
+    out property <color> success: dark-blue ? #34d399 : (dark ? #4ade80 : #15803d);
+    out property <color> success-bg: dark-blue ? #10322b : (dark ? #163322 : #dcfce7);
+    out property <color> warning: dark-blue ? #fbbf24 : (dark ? #fbbf24 : #b45309);
+    out property <color> warning-bg: dark-blue ? #332917 : (dark ? #362914 : #fef3c7);
+    out property <color> danger: dark-blue ? #fb7185 : (dark ? #f87171 : #dc2626);
+    out property <color> danger-bg: dark-blue ? #381a26 : (dark ? #3b191d : #fee2e2);
+    out property <color> imported: dark-blue ? #a78bfa : (dark ? #a78bfa : #7c3aed);
+    out property <color> imported-bg: dark-blue ? #231f42 : (dark ? #271f3d : #ede9fe);
+    out property <color> teal: dark-blue ? #2dd4bf : (dark ? #2dd4bf : #0d9488);
+    out property <color> teal-bg: dark-blue ? #113235 : (dark ? #113235 : #ccfbf1);
+}

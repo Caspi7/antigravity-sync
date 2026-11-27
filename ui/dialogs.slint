@@ -1,0 +1,216 @@
+import { ScrollView } from "std-widgets.slint";
+import { Palette } from "theme.slint";
+import { Action, SemanticPill } from "controls.slint";
+
+export component ReleaseNotesModal inherits Rectangle {
+    in property <string> app-version;
+    in property <bool> update-available;
+    in property <string> latest-version;
+    in property <string> release-notes-text;
+    in property <bool> is-busy;
+
+    callback close();
+    callback install-update();
+    callback open-releases();
+
+    background: #00000088;
+
+    TouchArea {
+        width: 100%;
+        height: 100%;
+        clicked => {
+            root.close();
+        }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: min(parent.width - 36px, 780px);
+        height: min(parent.height - 36px, 540px);
+        background: Palette.surface;
+        border-radius: 9px;
+        border-width: 1px;
+        border-color: Palette.border-strong;
+        clip: true;
+
+        TouchArea {
+            width: 100%;
+            height: 100%;
+        }
+
+        VerticalLayout {
+            padding: 15px;
+            spacing: 10px;
+
+            HorizontalLayout {
+                height: 28px;
+                spacing: 8px;
+
+                Text {
+                    text: "About & Release Notes";
+                    font-size: 21px;
+                    font-weight: 600;
+                    color: Palette.fg;
+                    vertical-alignment: center;
+                    horizontal-stretch: 0;
+                    overflow: elide;
+                }
+
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 0;
+                    SemanticPill {
+                        text: "v" + root.app-version;
+                        tone: "drive";
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                Action {
+                    width: 28px;
+                    height: 28px;
+                    horizontal-padding: 7px;
+                    icon-text: "×";
+                    hint: "Close";
+                    clicked => {
+                        root.close();
+                    }
+                }
+            }
+
+            if root.update-available: Rectangle {
+                background: Palette.success-bg;
+                border-width: 1px;
+                border-color: Palette.success;
+                border-radius: 6px;
+
+                HorizontalLayout {
+                    padding: 10px;
+                    spacing: 10px;
+
+                    Text {
+                        text: "Update v" + root.latest-version + " available";
+                        font-size: 13px;
+                        font-weight: 600;
+                        color: Palette.success;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+
+                    Action {
+                        label: root.is-busy ? "Installing..." : "Download & Install";
+                        primary: true;
+                        enabled: !root.is-busy;
+                        clicked => {
+                            root.install-update();
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                vertical-stretch: 1;
+                background: Palette.surface-alt;
+                border-width: 1px;
+                border-color: Palette.border;
+                border-radius: 7px;
+                clip: true;
+
+                notes-sv := ScrollView {
+                    width: 100%;
+                    height: 100%;
+                    viewport-width: self.visible-width;
+                    viewport-height: max(self.visible-height, notes-txt.preferred-height + 24px);
+
+                    Rectangle {
+                        x: 0px;
+                        y: 0px;
+                        width: notes-sv.visible-width;
+                        height: max(notes-sv.visible-height, notes-txt.preferred-height + 24px);
+
+                        notes-txt := Text {
+                            x: 12px;
+                            y: 12px;
+                            width: max(0px, parent.width - 24px);
+                            height: max(0px, parent.height - 24px);
+                            text: root.release-notes-text != "" ? root.release-notes-text : "No release notes available.";
+                            font-size: 13px;
+                            color: Palette.fg;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                height: 28px;
+                spacing: 8px;
+
+                Text {
+                    text: "Antigravity Sync v" + root.app-version + "  •  SHA-256 verified updates";
+                    font-size: 12px;
+                    color: Palette.muted;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+
+                Rectangle {
+                    height: 28px;
+                    horizontal-stretch: 0;
+                    border-radius: 6px;
+                    background: link-ta.pressed ? Palette.surface-pressed :
+                                (link-ta.has-hover ? Palette.surface-hover : transparent);
+                    border-width: 1px;
+                    border-color: link-fs.has-focus ? Palette.accent : transparent;
+
+                    forward-focus: link-fs;
+                    accessible-role: button;
+                    accessible-label: "Open GitHub Releases";
+
+                    link-fs := FocusScope {
+                        width: 100%;
+                        height: 100%;
+
+                        key-pressed(event) => {
+                            if (event.text == Key.Return || event.text == Key.Space) {
+                                root.open-releases();
+                                return accept;
+                            }
+                            return reject;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        alignment: center;
+
+                        Text {
+                            text: "Open GitHub Releases";
+                            font-size: 12.5px;
+                            font-weight: 600;
+                            color: link-ta.has-hover ? Palette.accent-hover : Palette.accent;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    link-ta := TouchArea {
+                        width: 100%;
+                        height: 100%;
+                        mouse-cursor: pointer;
+
+                        clicked => {
+                            root.open-releases();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

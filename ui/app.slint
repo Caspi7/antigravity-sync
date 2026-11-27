@@ -1,0 +1,855 @@
+import { CheckBox, LineEdit, ScrollView } from "std-widgets.slint";
+import { Palette, ThemeMode } from "theme.slint";
+import { Action, SemanticPill, Meter } from "controls.slint";
+import { HelpGuideModal } from "guide.slint";
+import { ReleaseNotesModal } from "dialogs.slint";
+
+export { Palette, ThemeMode }
+
+export struct TargetRow {
+    name: string,
+    label: string,
+    enabled: bool,
+    status: string,
+    status-tone: string,
+    local-size: string,
+    drive-size: string,
+    local-path: string,
+}
+
+component SortHeaderCell inherits Rectangle {
+    in property <string> label;
+    in property <int> column-index;
+    in property <int> active-column;
+    in property <bool> ascending;
+    in property <bool> align-right: false;
+
+    callback clicked();
+
+    private property <bool> is-active: root.active-column == root.column-index;
+
+    height: 100%;
+    background: hdr-ta.has-hover ? Palette.surface-hover : transparent;
+    border-radius: 4px;
+
+    Text {
+        x: 0px;
+        width: parent.width;
+        height: parent.height;
+        text: root.label + (root.is-active ? (root.ascending ? " ▲" : " ▼") : "");
+        font-size: 12px;
+        font-weight: 600;
+        color: root.is-active ? Palette.fg : Palette.muted;
+        horizontal-alignment: root.align-right ? right : left;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    hdr-ta := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: pointer;
+
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component MainWindow inherits Window {
+    title: "Antigravity Sync v" + app-version;
+    preferred-width: 1080px;
+    preferred-height: 680px;
+    min-width: 820px;
+    min-height: 540px;
+    background: Palette.bg;
+
+    in property <string> app-version: "2.0.0";
+    in property <string> theme-label: "System";
+    in-out property <string> sync-root: "G:\\My Drive\\AntigravitySync";
+    in-out property <bool> auto-relaunch: true;
+    in-out property <bool> auto-check-updates: true;
+    in property <bool> is-busy: false;
+    in property <bool> antigravity-running: false;
+    in property <float> progress: 0.0;
+    in property <string> status-text: "Ready";
+    in property <string> log-text: "";
+    in property <[TargetRow]> targets;
+    in-out property <int> selected-row: -1;
+    in property <int> sort-column: 0;
+    in property <bool> sort-ascending: true;
+    in property <bool> update-available: false;
+    in property <string> latest-version: "";
+    in property <string> release-notes-text: "";
+    in-out property <bool> show-guide: false;
+    in-out property <bool> show-release-notes: false;
+
+    private property <string> hover-hint: "";
+
+    callback push-clicked();
+    callback pull-clicked();
+    callback launch-clicked();
+    callback refresh-clicked();
+    callback cancel-clicked();
+    callback browse-clicked();
+    callback cycle-theme();
+    callback install-update();
+    callback open-releases();
+    callback settings-changed();
+    callback toggle-target(int);
+    callback sort-by(int);
+
+    forward-focus: root-focus;
+
+    root-focus := FocusScope {
+        width: 100%;
+        height: 100%;
+
+        key-pressed(event) => {
+            if (event.text == Key.F1) {
+                root.show-release-notes = false;
+                root.show-guide = !root.show-guide;
+                return accept;
+            }
+            if (event.text == Key.Escape) {
+                if (root.show-guide) {
+                    root.show-guide = false;
+                    return accept;
+                }
+                if (root.show-release-notes) {
+                    root.show-release-notes = false;
+                    return accept;
+                }
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            width: 100%;
+            height: 100%;
+            spacing: 0px;
+
+            // 1. Top Command Bar (46px, bottom-anchored 36px tab buttons)
+            Rectangle {
+                height: 46px;
+                vertical-stretch: 0;
+                background: Palette.header-bg;
+
+                Rectangle {
+                    x: 0px;
+                    y: parent.height - 1px;
+                    width: 100%;
+                    height: 1px;
+                    background: Palette.border;
+                }
+
+                HorizontalLayout {
+                    x: 0px;
+                    y: 10px;
+                    width: parent.width;
+                    height: 36px;
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    spacing: 4px;
+
+                    Action {
+                        tab: true;
+                        primary: true;
+                        label: "Push";
+                        icon-text: "↑";
+                        enabled: !root.is-busy;
+                        hint: "Mirror enabled local Antigravity targets to your cloud Sync Folder";
+                        clicked => {
+                            root.push-clicked();
+                        }
+                        hovered(h) => {
+                            root.hover-hint = h;
+                        }
+                    }
+
+                    Action {
+                        tab: true;
+                        tone: "teal";
+                        label: "Pull";
+                        icon-text: "↓";
+                        enabled: !root.is-busy;
+                        hint: "Create safety backup and restore enabled targets from cloud Sync Folder";
+                        clicked => {
+                            root.pull-clicked();
+                        }
+                        hovered(h) => {
+                            root.hover-hint = h;
+                        }
+                    }
+
+                    Action {
+                        tab: true;
+                        tone: "accent";
+                        label: "Launch";
+                        icon-text: "▶";
+                        enabled: !root.is-busy;
+                        hint: "Launch Antigravity Desktop";
+                        clicked => {
+                            root.launch-clicked();
+                        }
+                        hovered(h) => {
+                            root.hover-hint = h;
+                        }
+                    }
+
+                    Action {
+                        tab: true;
+                        label: "Refresh";
+                        icon-text: "↻";
+                        enabled: !root.is-busy;
+                        hint: "Rescan local and Drive target sizes and sync status";
+                        clicked => {
+                            root.refresh-clicked();
+                        }
+                        hovered(h) => {
+                            root.hover-hint = h;
+                        }
+                    }
+
+                    Action {
+                        tab: true;
+                        tone: "danger";
+                        label: "Cancel";
+                        icon-text: "✕";
+                        enabled: root.is-busy;
+                        hint: "Cancel the currently running sync operation";
+                        clicked => {
+                            root.cancel-clicked();
+                        }
+                        hovered(h) => {
+                            root.hover-hint = h;
+                        }
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                    }
+
+                    if root.update-available: Action {
+                        tab: true;
+                        tone: "success";
+                        label: root.latest-version != "" ? "Update v" + root.latest-version : "Update";
+                        icon-text: "★";
+                        hint: "Update available — click to review release notes and install";
+                        clicked => {
+                            root.show-release-notes = true;
+                        }
+                        hovered(h) => {
+                            root.hover-hint = h;
+                        }
+                    }
+
+                    Action {
+                        tab: true;
+                        label: root.theme-label;
+                        icon-text: "◐";
+                        hint: "Cycle theme mode (System, Light, Dark, Dark Blue)";
+                        clicked => {
+                            root.cycle-theme();
+                        }
+                        hovered(h) => {
+                            root.hover-hint = h;
+                        }
+                    }
+
+                    Action {
+                        tab: true;
+                        label: "Release Notes";
+                        hint: "View version info, release notes, and updates";
+                        clicked => {
+                            root.show-release-notes = true;
+                        }
+                        hovered(h) => {
+                            root.hover-hint = h;
+                        }
+                    }
+
+                    Action {
+                        tab: true;
+                        label: "?";
+                        horizontal-padding: 10px;
+                        hint: "Open Antigravity Sync Guide (F1)";
+                        clicked => {
+                            root.show-guide = true;
+                        }
+                        hovered(h) => {
+                            root.hover-hint = h;
+                        }
+                    }
+                }
+            }
+
+            // 2. Status & Progress Strip (31px, bg)
+            Rectangle {
+                height: 31px;
+                vertical-stretch: 0;
+                background: Palette.bg;
+
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    spacing: 10px;
+
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 0;
+
+                        Meter {
+                            width: 138px;
+                            progress: root.progress;
+                        }
+                    }
+
+                    Text {
+                        text: root.status-text;
+                        font-size: 12px;
+                        color: Palette.muted;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 0;
+
+                        SemanticPill {
+                            dot: true;
+                            text: root.antigravity-running ? "Antigravity Running" : "Antigravity Closed";
+                            tone: root.antigravity-running ? "warning" : "success";
+                        }
+                    }
+                }
+            }
+
+            // 3. Split-Card Workspace (8px padding, 8px gap)
+            HorizontalLayout {
+                vertical-stretch: 1;
+                padding: 8px;
+                spacing: 8px;
+
+                // Left Sidebar (270px)
+                Rectangle {
+                    width: 270px;
+                    horizontal-stretch: 0;
+                    background: Palette.surface;
+                    border-width: 1px;
+                    border-color: Palette.border;
+                    border-radius: 6px;
+                    clip: true;
+
+                    VerticalLayout {
+                        padding: 9px;
+                        spacing: 8px;
+
+                        Text {
+                            text: "Sync Folder";
+                            font-size: 12px;
+                            font-weight: 600;
+                            color: Palette.muted;
+                        }
+
+                        HorizontalLayout {
+                            height: 30px;
+                            spacing: 6px;
+
+                            LineEdit {
+                                height: 30px;
+                                horizontal-stretch: 1;
+                                text <=> root.sync-root;
+                                enabled: !root.is-busy;
+                                placeholder-text: "G:\\My Drive\\AntigravitySync";
+                                edited => {
+                                    root.settings-changed();
+                                }
+                                accepted => {
+                                    root.settings-changed();
+                                }
+                            }
+
+                            Action {
+                                label: "Browse";
+                                height: 30px;
+                                enabled: !root.is-busy;
+                                hint: "Choose your cloud sync folder";
+                                clicked => {
+                                    root.browse-clicked();
+                                }
+                                hovered(h) => {
+                                    root.hover-hint = h;
+                                }
+                            }
+                        }
+
+                        VerticalLayout {
+                            spacing: 4px;
+
+                            CheckBox {
+                                text: "Auto-relaunch Antigravity";
+                                checked <=> root.auto-relaunch;
+                                enabled: !root.is-busy;
+                                toggled => {
+                                    root.settings-changed();
+                                }
+                            }
+
+                            CheckBox {
+                                text: "Check updates on startup";
+                                checked <=> root.auto-check-updates;
+                                enabled: !root.is-busy;
+                                toggled => {
+                                    root.settings-changed();
+                                }
+                            }
+                        }
+
+                        // Grouped Target Checkboxes with 3px drive accent header
+                        Rectangle {
+                            vertical-stretch: 1;
+                            min-height: 110px;
+                            border-width: 1px;
+                            border-color: Palette.border;
+                            border-radius: 5px;
+                            background: Palette.surface;
+                            clip: true;
+
+                            VerticalLayout {
+                                spacing: 0px;
+
+                                Rectangle {
+                                    height: 29px;
+                                    vertical-stretch: 0;
+                                    background: Palette.header-bg;
+
+                                    Rectangle {
+                                        x: 0px;
+                                        y: 6px;
+                                        width: 3px;
+                                        height: parent.height - 12px;
+                                        border-radius: 1.5px;
+                                        background: Palette.drive;
+                                    }
+
+                                    Text {
+                                        x: 9px;
+                                        width: max(0px, parent.width - 18px);
+                                        height: parent.height;
+                                        text: "Sync Targets";
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        color: Palette.muted;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+
+                                    Rectangle {
+                                        x: 0px;
+                                        y: parent.height - 1px;
+                                        width: 100%;
+                                        height: 1px;
+                                        background: Palette.border;
+                                    }
+                                }
+
+                                targets-sv := ScrollView {
+                                    vertical-stretch: 1;
+                                    viewport-width: self.visible-width;
+                                    viewport-height: max(self.visible-height, targets-col.preferred-height + 8px);
+
+                                    targets-col := VerticalLayout {
+                                        x: 0px;
+                                        y: 0px;
+                                        width: targets-sv.visible-width;
+                                        padding: 4px;
+                                        spacing: 2px;
+                                        alignment: start;
+
+                                        for row[idx] in root.targets: Rectangle {
+                                            height: 28px;
+                                            border-radius: 4px;
+                                            background: tgt-ta.has-hover ? Palette.surface-hover : Palette.surface;
+
+                                            HorizontalLayout {
+                                                padding-left: 6px;
+                                                padding-right: 6px;
+                                                spacing: 6px;
+
+                                                CheckBox {
+                                                    text: row.label;
+                                                    checked: row.enabled;
+                                                    enabled: !root.is-busy;
+                                                    horizontal-stretch: 1;
+                                                    toggled => {
+                                                        root.toggle-target(idx);
+                                                    }
+                                                }
+                                            }
+
+                                            tgt-ta := TouchArea {
+                                                width: 100%;
+                                                height: 100%;
+                                                mouse-cursor: !root.is-busy ? pointer : default;
+
+                                                clicked => {
+                                                    if (!root.is-busy) {
+                                                        root.toggle-target(idx);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Bottom surface-readonly info box
+                        Rectangle {
+                            vertical-stretch: 0;
+                            background: Palette.surface-readonly;
+                            border-width: 1px;
+                            border-color: Palette.border;
+                            border-radius: 5px;
+
+                            VerticalLayout {
+                                padding: 8px;
+                                spacing: 4px;
+
+                                Text {
+                                    text: (root.selected-row >= 0 && root.selected-row < root.targets.length)
+                                        ? root.targets[root.selected-row].label
+                                        : "Target Details";
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    color: Palette.fg;
+                                    overflow: elide;
+                                }
+
+                                Text {
+                                    text: (root.selected-row >= 0 && root.selected-row < root.targets.length)
+                                        ? root.targets[root.selected-row].local-path
+                                        : "Click any target row to view its local path. Pull creates automatic backups in %USERPROFILE%\\.gemini.";
+                                    font-size: 11.5px;
+                                    color: Palette.muted;
+                                    wrap: word-wrap;
+                                }
+
+                                if root.selected-row >= 0 && root.selected-row < root.targets.length: Text {
+                                    text: "Local: " + root.targets[root.selected-row].local-size
+                                        + "  •  Drive: " + root.targets[root.selected-row].drive-size;
+                                    font-size: 11.5px;
+                                    color: Palette.accent;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Right Main Card (flex: 1)
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: Palette.surface;
+                    border-width: 1px;
+                    border-color: Palette.border;
+                    border-radius: 6px;
+                    clip: true;
+
+                    VerticalLayout {
+                        padding: 8px;
+                        spacing: 8px;
+
+                        // Sortable Data Grid
+                        Rectangle {
+                            vertical-stretch: 1;
+                            border-width: 1px;
+                            border-color: Palette.border;
+                            border-radius: 5px;
+                            background: Palette.surface;
+                            clip: true;
+
+                            VerticalLayout {
+                                spacing: 0px;
+
+                                // Sticky 29px header
+                                Rectangle {
+                                    height: 29px;
+                                    vertical-stretch: 0;
+                                    background: Palette.header-bg;
+
+                                    HorizontalLayout {
+                                        padding-left: 8px;
+                                        padding-right: 22px;
+                                        spacing: 8px;
+
+                                        SortHeaderCell {
+                                            label: "Target";
+                                            column-index: 0;
+                                            active-column: root.sort-column;
+                                            ascending: root.sort-ascending;
+                                            horizontal-stretch: 1;
+                                            clicked => {
+                                                root.sort-by(0);
+                                            }
+                                        }
+
+                                        SortHeaderCell {
+                                            label: "Status";
+                                            column-index: 1;
+                                            active-column: root.sort-column;
+                                            ascending: root.sort-ascending;
+                                            width: 130px;
+                                            horizontal-stretch: 0;
+                                            clicked => {
+                                                root.sort-by(1);
+                                            }
+                                        }
+
+                                        SortHeaderCell {
+                                            label: "Local";
+                                            column-index: 2;
+                                            active-column: root.sort-column;
+                                            ascending: root.sort-ascending;
+                                            align-right: true;
+                                            width: 100px;
+                                            horizontal-stretch: 0;
+                                            clicked => {
+                                                root.sort-by(2);
+                                            }
+                                        }
+
+                                        SortHeaderCell {
+                                            label: "Drive";
+                                            column-index: 3;
+                                            active-column: root.sort-column;
+                                            ascending: root.sort-ascending;
+                                            align-right: true;
+                                            width: 100px;
+                                            horizontal-stretch: 0;
+                                            clicked => {
+                                                root.sort-by(3);
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        x: 0px;
+                                        y: parent.height - 1px;
+                                        width: 100%;
+                                        height: 1px;
+                                        background: Palette.border;
+                                    }
+                                }
+
+                                grid-sv := ScrollView {
+                                    vertical-stretch: 1;
+                                    viewport-width: self.visible-width;
+                                    viewport-height: max(self.visible-height, grid-rows.preferred-height);
+
+                                    grid-rows := VerticalLayout {
+                                        x: 0px;
+                                        y: 0px;
+                                        width: grid-sv.visible-width;
+                                        spacing: 0px;
+                                        alignment: start;
+
+                                        for row[idx] in root.targets: Rectangle {
+                                            height: 29px;
+                                            clip: true;
+                                            background: root.selected-row == idx ? Palette.accent-pressed :
+                                                        (row-ta.has-hover ? Palette.surface-hover :
+                                                        (mod(idx, 2) == 0 ? Palette.surface : Palette.surface-alt));
+
+                                            row-ta := TouchArea {
+                                                width: 100%;
+                                                height: 100%;
+                                                mouse-cursor: pointer;
+
+                                                clicked => {
+                                                    root.selected-row = idx;
+                                                }
+                                            }
+
+                                            HorizontalLayout {
+                                                padding-left: 8px;
+                                                padding-right: 22px;
+                                                spacing: 8px;
+
+                                                Text {
+                                                    text: row.label;
+                                                    font-size: 13px;
+                                                    color: root.selected-row == idx ? #ffffff : Palette.fg;
+                                                    vertical-alignment: center;
+                                                    overflow: elide;
+                                                    horizontal-stretch: 1;
+                                                }
+
+                                                Rectangle {
+                                                    width: 130px;
+                                                    horizontal-stretch: 0;
+
+                                                    SemanticPill {
+                                                        x: 0px;
+                                                        y: (parent.height - self.height) / 2;
+                                                        text: row.status;
+                                                        tone: row.status-tone;
+                                                        inverted: root.selected-row == idx;
+                                                    }
+                                                }
+
+                                                Text {
+                                                    width: 100px;
+                                                    horizontal-stretch: 0;
+                                                    text: row.local-size;
+                                                    font-size: 12.5px;
+                                                    color: root.selected-row == idx ? #ffffff : Palette.fg;
+                                                    horizontal-alignment: right;
+                                                    vertical-alignment: center;
+                                                    overflow: elide;
+                                                }
+
+                                                Text {
+                                                    width: 100px;
+                                                    horizontal-stretch: 0;
+                                                    text: row.drive-size;
+                                                    font-size: 12.5px;
+                                                    color: root.selected-row == idx ? #ffffff : Palette.fg;
+                                                    horizontal-alignment: right;
+                                                    vertical-alignment: center;
+                                                    overflow: elide;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Bottom surface-readonly scrollable Activity Log (height: 150px)
+                        Rectangle {
+                            height: 150px;
+                            vertical-stretch: 0;
+                            background: Palette.surface-readonly;
+                            border-width: 1px;
+                            border-color: Palette.border;
+                            border-radius: 5px;
+                            clip: true;
+
+                            VerticalLayout {
+                                spacing: 0px;
+
+                                Rectangle {
+                                    height: 24px;
+                                    vertical-stretch: 0;
+                                    background: Palette.header-bg;
+
+                                    Text {
+                                        x: 8px;
+                                        width: max(0px, parent.width - 16px);
+                                        height: parent.height;
+                                        text: "Activity Log";
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        color: Palette.muted;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+
+                                    Rectangle {
+                                        x: 0px;
+                                        y: parent.height - 1px;
+                                        width: 100%;
+                                        height: 1px;
+                                        background: Palette.border;
+                                    }
+                                }
+
+                                log-sv := ScrollView {
+                                    vertical-stretch: 1;
+                                    viewport-width: self.visible-width;
+                                    viewport-height: max(self.visible-height, log-txt.preferred-height + 16px);
+
+                                    Rectangle {
+                                        x: 0px;
+                                        y: 0px;
+                                        width: log-sv.visible-width;
+                                        height: max(log-sv.visible-height, log-txt.preferred-height + 16px);
+
+                                        log-txt := Text {
+                                            x: 8px;
+                                            y: 8px;
+                                            width: max(0px, parent.width - 16px);
+                                            height: max(0px, parent.height - 16px);
+                                            text: root.log-text != "" ? root.log-text : "Ready. Use Push, Pull, or Refresh to inspect and sync targets.";
+                                            font-family: "Cascadia Mono";
+                                            font-size: 12px;
+                                            color: root.log-text != "" ? Palette.fg : Palette.muted;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Floating hover-hint tooltip pill when hover-hint != "" and no modal is open
+        if root.hover-hint != "" && !root.show-guide && !root.show-release-notes: Rectangle {
+            x: 12px;
+            y: 75px;
+            height: 27px;
+            width: min(parent.width - 24px, hint-txt.preferred-width + 22px);
+            background: Palette.surface;
+            border-width: 1px;
+            border-color: Palette.border-strong;
+            border-radius: 6px;
+            clip: true;
+
+            hint-txt := Text {
+                x: 11px;
+                y: 0px;
+                width: max(0px, parent.width - 22px);
+                height: parent.height;
+                text: root.hover-hint;
+                font-size: 12px;
+                color: Palette.fg;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        // 5. Modals
+        if root.show-guide: HelpGuideModal {
+            width: 100%;
+            height: 100%;
+            close => {
+                root.show-guide = false;
+            }
+        }
+
+        if root.show-release-notes: ReleaseNotesModal {
+            width: 100%;
+            height: 100%;
+            app-version: root.app-version;
+            update-available: root.update-available;
+            latest-version: root.latest-version;
+            release-notes-text: root.release-notes-text;
+            is-busy: root.is-busy;
+            close => {
+                root.show-release-notes = false;
+            }
+            install-update => {
+                root.install-update();
+            }
+            open-releases => {
+                root.open-releases();
+            }
+        }
+    }
+}

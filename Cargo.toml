@@ -1,0 +1,30 @@
+[package]
+name = "antigravity-sync"
+version = "2.0.0"
+edition = "2021"
+description = "Fluent Windows 11 desktop utility & launcher to sync Antigravity across machines"
+license = "MIT"
+
+[[bin]]
+name = "AntigravitySync"
+path = "src/main.rs"
+
+[dependencies]
+slint = { version = "=1.9.2", default-features = false, features = ["compat-1-2", "std", "backend-winit", "renderer-software"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+ureq = { version = "2.12", default-features = false, features = ["native-tls", "json"] }
+dirs = "5"
+chrono = "=0.4.38"
+rfd = "0.15"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+
+[build-dependencies]
+slint-build = "=1.9.2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
