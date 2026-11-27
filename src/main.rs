@@ -26,11 +26,9 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.1.0 — Non-Destructive Smart Merge & Duplicate Resolution\n\n\
-• Replaced destructive /MIR mirroring with non-destructive smart merging so PC and Laptop chats never overwrite or delete each other.\n\
-• Added bundled SQLite WAL checkpointing (PRAGMA wal_checkpoint(TRUNCATE)), integrity verification (PRAGMA quick_check), and true row-level merging for conversation_summaries.db.\n\
-• Automatically resolves Google Drive conflict duplicates (e.g. 'file (1).pb') and cleans orphaned -wal/-shm files.\n\
-• Gracefully stops both Antigravity.exe and language_server.exe before Push & Pull and migrates legacy settings.json files.";
+Antigravity Sync v2.1.1 — Custom Logo & Titlebar Icon\n\n\
+• Added a custom File Inventory-style logo (navy squircle, cyan cloud, warm gold sync arrows) embedded in the window titlebar, taskbar, executable, and Setup installer.\n\
+• Includes v2.1.0 non-destructive smart merge, bundled SQLite WAL checkpointing & row-level summary merge, and Google Drive conflict cleanup.";
 
 struct AppState {
     settings: AppSettings,

@@ -1,6 +1,6 @@
 [package]
 name = "antigravity-sync"
-version = "2.1.0"
+version = "2.1.1"
 edition = "2021"
 description = "Fluent Windows 11 desktop utility & launcher to sync Antigravity across machines"
 license = "MIT"
@@ -23,6 +23,7 @@ windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphic
 
 [build-dependencies]
 slint-build = "=1.9.2"
+winres = "0.1"
 
 [profile.release]
 opt-level = "z"
