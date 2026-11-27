@@ -1,10 +1,11 @@
 use chrono::Local;
 use std::ffi::OsString;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 #[cfg(windows)]
@@ -381,26 +382,53 @@ fn run_sync_impl(
                 format_merge_detail(&stats)
             }
         } else if target.is_dir {
-            // Use fast multi-threaded robocopy (/E /XO /MT:16) for large asset/config directories:
+            // Use fast multi-threaded robocopy (/E /XO /MT:32) with live file-level stdout streaming:
             // /E + /XO is strictly non-destructive (copies new & newer files, never deletes existing).
-            run_robocopy_with_tick(src, dst, true, &cancel, |elapsed| {
+            let mut copied_files = 0usize;
+            run_robocopy_with_progress(src, dst, true, &cancel, |elapsed, latest_file, count| {
+                copied_files = count;
                 let frac = (elapsed.as_secs_f32() / (elapsed.as_secs_f32() + 4.0)).clamp(0.0, 0.92);
                 let live_pct = pct + (next_pct - pct) * frac;
+                let file_part = latest_file
+                    .as_deref()
+                    .map(|f| format!(" · {f}"))
+                    .unwrap_or_default();
+                let count_part = if count > 0 {
+                    format!(" · {count} files")
+                } else {
+                    String::new()
+                };
                 on_progress(SyncProgress {
                     percent: live_pct,
                     status_text: format!(
-                        "{:.0}% · [{}] {} ({}/{}) — {:.1}s elapsed",
+                        "{:.0}% · [{}] {} ({}/{}){}{} — {:.1}s",
                         live_pct,
                         mode.label(),
                         target.label,
                         target_num,
                         target_count,
+                        count_part,
+                        file_part,
                         elapsed.as_secs_f32()
                     ),
-                    log_line: None,
+                    log_line: if count > 0 && count % 25 == 0 {
+                        Some(format!(
+                            "  [{}] {}: {} files copied{}",
+                            mode.label(),
+                            target.label,
+                            count,
+                            file_part
+                        ))
+                    } else {
+                        None
+                    },
                 });
             })?;
-            "additive /MT:16 merge".to_string()
+            if copied_files > 0 {
+                format!("{copied_files} files merged (/MT:32)")
+            } else {
+                "up to date (/MT:32)".to_string()
+            }
         } else {
             let stats = crate::merge::merge_single_file(src, dst, &cancel)?;
             format_merge_detail(&stats)
@@ -570,15 +598,15 @@ fn run_robocopy(
     is_dir: bool,
     cancel: &AtomicBool,
 ) -> Result<(), String> {
-    run_robocopy_with_tick(src, dst, is_dir, cancel, |_| {})
+    run_robocopy_with_progress(src, dst, is_dir, cancel, |_, _, _| {})
 }
 
-fn run_robocopy_with_tick(
+fn run_robocopy_with_progress(
     src: &Path,
     dst: &Path,
     is_dir: bool,
     cancel: &AtomicBool,
-    on_tick: impl Fn(Duration),
+    mut on_progress: impl FnMut(Duration, Option<String>, usize),
 ) -> Result<(), String> {
     check_cancelled(cancel)?;
 
@@ -591,14 +619,16 @@ fn run_robocopy_with_tick(
                 dst.display()
             )
         })?;
-            cmd.arg(clean_robocopy_dir(src))
-                .arg(clean_robocopy_dir(dst))
-                .args([
-                    "/E", "/XO", "/FFT", "/MT:16", "/R:1", "/W:1", "/NFL", "/NDL", "/NP", "/NJH", "/NJS",
-                    "/XD", "cache", "Cache", "Code Cache", "GPUCache", "CachedData", "Crashpad",
-                    "logs", ".system_generated", "browser_sandbox", "temp", "tmp", "__pycache__", "node_modules",
-                    "/XF", "*.log", "*.tmp", "*.bak", "* (*).*",
-                ]);
+        cmd.arg(clean_robocopy_dir(src))
+            .arg(clean_robocopy_dir(dst))
+            .args([
+                "/E", "/XO", "/FFT", "/MT:32", "/R:1", "/W:1", "/NDL", "/NP", "/NJH", "/NJS",
+                "/NC", "/NS",
+                "/XD", "cache", "Cache", "Code Cache", "GPUCache", "CachedData", "Crashpad",
+                "logs", ".system_generated", "browser_sandbox", "temp", "tmp", "__pycache__",
+                "node_modules",
+                "/XF", "*.log", "*.tmp", "*.bak", "* (*).*",
+            ]);
     } else {
         let src_dir = src.parent().ok_or_else(|| {
             format!("Source file '{}' has no parent directory.", src.display())
@@ -618,18 +648,87 @@ fn run_robocopy_with_tick(
         cmd.arg(clean_robocopy_dir(src_dir))
             .arg(clean_robocopy_dir(dst_dir))
             .arg(file_name)
-            .args(["/IS", "/IT", "/R:1", "/W:1", "/NFL", "/NDL", "/NP", "/NJH", "/NJS"]);
+            .args([
+                "/IS", "/IT", "/R:1", "/W:1", "/NDL", "/NP", "/NJH", "/NJS", "/NC", "/NS",
+            ]);
     }
 
     cmd.stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::null());
     apply_no_window(&mut cmd);
 
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("Failed to start robocopy.exe: {e}"))?;
-    let status = wait_child_with_cancel_and_tick(&mut child, cancel, on_tick)?;
+
+    let file_count = Arc::new(AtomicUsize::new(0));
+    let latest_file: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+
+    let reader_handle = child.stdout.take().map(|stdout| {
+        let count_ref = Arc::clone(&file_count);
+        let latest_ref = Arc::clone(&latest_file);
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().map_while(Result::ok) {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                let display_name = Path::new(trimmed)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(trimmed)
+                    .to_string();
+                count_ref.fetch_add(1, Ordering::Relaxed);
+                if let Ok(mut guard) = latest_ref.lock() {
+                    *guard = Some(display_name);
+                }
+            }
+        })
+    });
+
+    let start = Instant::now();
+    let mut last_tick = Instant::now();
+    let status = loop {
+        if cancel.load(Ordering::Relaxed) {
+            let _ = child.kill();
+            let _ = child.wait();
+            if let Some(handle) = reader_handle {
+                let _ = handle.join();
+            }
+            return Err("Sync cancelled by user.".to_string());
+        }
+
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if last_tick.elapsed() >= Duration::from_millis(250) {
+                    let count = file_count.load(Ordering::Relaxed);
+                    let latest = latest_file.lock().ok().and_then(|g| g.clone());
+                    on_progress(start.elapsed(), latest, count);
+                    last_tick = Instant::now();
+                }
+                std::thread::sleep(CANCEL_POLL_INTERVAL);
+            }
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                if let Some(handle) = reader_handle {
+                    let _ = handle.join();
+                }
+                return Err(format!("Failed waiting for child process: {e}"));
+            }
+        }
+    };
+
+    if let Some(handle) = reader_handle {
+        let _ = handle.join();
+    }
+
+    let final_count = file_count.load(Ordering::Relaxed);
+    let final_latest = latest_file.lock().ok().and_then(|g| g.clone());
+    on_progress(start.elapsed(), final_latest, final_count);
 
     match status.code() {
         // Robocopy exit codes 0..=7 indicate success (copied, extra, mismatched, or unchanged).
@@ -766,6 +865,16 @@ fn entry_size_bytes(path: &Path, is_dir: bool) -> u64 {
                 continue;
             }
             if ft.is_dir() {
+                if let Some(name) = entry.file_name().to_str() {
+                    if matches!(
+                        name,
+                        "cache" | "Cache" | "Code Cache" | "GPUCache" | "CachedData"
+                            | "Crashpad" | "logs" | ".system_generated" | "browser_sandbox"
+                            | "temp" | "tmp" | "__pycache__" | "node_modules"
+                    ) {
+                        continue;
+                    }
+                }
                 stack.push(entry.path());
             } else if ft.is_file() {
                 total = total.saturating_add(entry.metadata().map(|m| m.len()).unwrap_or(0));

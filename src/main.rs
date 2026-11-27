@@ -20,14 +20,17 @@ use updater::{
     APP_VERSION, RELEASES_PAGE_URL,
 };
 use win32::{
-    is_antigravity_running, is_windows_dark_mode, launch_antigravity, open_url, SingleInstanceGuard,
+    install_or_repair_plugin, is_antigravity_running, is_plugin_installed, is_windows_dark_mode,
+    launch_antigravity, open_url, SingleInstanceGuard,
 };
 
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.1.7 — Fix Theme Reset After Updates\n\n\
-• Fixed settings.json losing the saved theme after every Setup/auto-update (Installer.cs now writes UTF-8 without BOM, and AppSettings::load() strips any UTF-8 BOM before parsing).";
+Antigravity Sync v2.2.0 — Live File Progress & 1-Click Plugin Installer\n\n\
+• Live Push/Pull Progress: Streams real-time copied file counts and current filename from robocopy (/MT:32) so large folders never look stuck.\n\
+• Faster Target Scanning: Skips cache/node_modules/.system_generated when scanning target sizes.\n\
+• 1-Click 'Install Plugin' / 'Plugin Ready' Button: Installs or repairs the Antigravity Sync plugin (including @modelcontextprotocol/sdk and config.json registration) directly from the command bar.";
 
 struct AppState {
     settings: AppSettings,
@@ -173,6 +176,7 @@ fn spawn_refresh(
 
     thread::spawn(move || {
         let running = is_antigravity_running();
+        let plugin_ok = is_plugin_installed();
         let stats = scan_target_stats(&sync_root);
         let _ = slint::invoke_from_event_loop(move || {
             if refresh_seq.load(Ordering::SeqCst) != seq {
@@ -180,6 +184,7 @@ fn spawn_refresh(
             }
             if let Some(ui) = ui_weak.upgrade() {
                 ui.set_antigravity_running(running);
+                ui.set_plugin_installed(plugin_ok);
                 let mut guard = state.lock().unwrap();
                 guard.stats = stats;
                 refresh_rows_in_ui(&ui, &guard);
@@ -527,6 +532,39 @@ fn main() -> Result<(), slint::PlatformError> {
                     spawn_refresh(ui_w.clone(), Arc::clone(&st), Arc::clone(&rseq));
                 }
             }
+        });
+    }
+
+    // Install / Repair Antigravity Plugin
+    {
+        let ui_w = ui.as_weak();
+        ui.on_install_plugin_clicked(move || {
+            if let Some(ui) = ui_w.upgrade() {
+                ui.set_is_busy(true);
+                ui.set_status_text(SharedString::from("Installing/repairing Antigravity Sync plugin..."));
+                append_log(&ui, "Installing/repairing Antigravity Sync plugin...");
+            }
+            let ui_done = ui_w.clone();
+            thread::spawn(move || {
+                let res = install_or_repair_plugin();
+                let installed = is_plugin_installed();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(ui) = ui_done.upgrade() {
+                        ui.set_is_busy(false);
+                        ui.set_plugin_installed(installed);
+                        match res {
+                            Ok(msg) => {
+                                ui.set_status_text(SharedString::from(&msg));
+                                append_log(&ui, &msg);
+                            }
+                            Err(err) => {
+                                ui.set_status_text(SharedString::from(&err));
+                                append_log(&ui, &format!("Plugin ERROR: {err}"));
+                            }
+                        }
+                    }
+                });
+            });
         });
     }
 

@@ -65,13 +65,14 @@ export component MainWindow inherits Window {
     min-height: 540px;
     background: Palette.bg;
 
-    in property <string> app-version: "2.1.7";
+    in property <string> app-version: "2.2.0";
     in property <string> theme-label: "System";
     in-out property <string> sync-root: "G:\\My Drive\\AntigravitySync";
     in-out property <bool> auto-relaunch: true;
     in-out property <bool> auto-check-updates: true;
     in property <bool> is-busy: false;
     in property <bool> antigravity-running: false;
+    in property <bool> plugin-installed: false;
     in property <float> progress: 0.0;
     in property <string> status-text: "Ready";
     in property <string> log-text: "";
@@ -94,6 +95,7 @@ export component MainWindow inherits Window {
     callback refresh-clicked();
     callback cancel-clicked();
     callback browse-clicked();
+    callback install-plugin-clicked();
     callback cycle-theme();
     callback check-updates();
     callback install-update();
@@ -255,6 +257,21 @@ export component MainWindow inherits Window {
                         hint: "Manually check GitHub Releases for a newer version";
                         clicked => {
                             root.check-updates();
+                        }
+                        hovered(h) => {
+                            root.hover-hint = h;
+                        }
+                    }
+
+                    Action {
+                        tab: true;
+                        tone: root.plugin-installed ? "success" : "warning";
+                        icon: "check";
+                        label: root.plugin-installed ? "Plugin Ready" : "Install Plugin";
+                        enabled: !root.is-busy;
+                        hint: "Install or repair the Antigravity Sync MCP plugin in ~/.gemini/config/plugins";
+                        clicked => {
+                            root.install-plugin-clicked();
                         }
                         hovered(h) => {
                             root.hover-hint = h;

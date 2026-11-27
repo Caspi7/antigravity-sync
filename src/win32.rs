@@ -142,3 +142,112 @@ pub fn open_url(url: &str) {
         .creation_flags(CREATE_NO_WINDOW)
         .spawn();
 }
+
+const PLUGIN_JSON: &str = include_str!("../plugin/plugin.json");
+const PLUGIN_PACKAGE_JSON: &str = include_str!("../plugin/package.json");
+const PLUGIN_SERVER_MJS: &str = include_str!("../plugin/server.mjs");
+
+pub fn is_plugin_installed() -> bool {
+    let Some(home) = dirs::home_dir().or_else(|| std::env::var_os("USERPROFILE").map(PathBuf::from)) else {
+        return false;
+    };
+    let plugin_dir = home.join(".gemini").join("config").join("plugins").join("antigravity-sync");
+    plugin_dir.join("plugin.json").is_file()
+        && plugin_dir.join("server.mjs").is_file()
+        && plugin_dir.join("mcp_config.json").is_file()
+        && plugin_dir.join("node_modules").join("@modelcontextprotocol").join("sdk").is_dir()
+}
+
+pub fn install_or_repair_plugin() -> Result<String, String> {
+    let home = dirs::home_dir()
+        .or_else(|| std::env::var_os("USERPROFILE").map(PathBuf::from))
+        .ok_or_else(|| "Could not locate %USERPROFILE%.".to_string())?;
+    let config_dir = home.join(".gemini").join("config");
+    let plugin_dir = config_dir.join("plugins").join("antigravity-sync");
+    std::fs::create_dir_all(&plugin_dir)
+        .map_err(|e| format!("Failed to create plugin folder: {e}"))?;
+
+    std::fs::write(plugin_dir.join("plugin.json"), PLUGIN_JSON)
+        .map_err(|e| format!("Failed to write plugin.json: {e}"))?;
+    std::fs::write(plugin_dir.join("package.json"), PLUGIN_PACKAGE_JSON)
+        .map_err(|e| format!("Failed to write package.json: {e}"))?;
+    std::fs::write(plugin_dir.join("server.mjs"), PLUGIN_SERVER_MJS)
+        .map_err(|e| format!("Failed to write server.mjs: {e}"))?;
+
+    // Find Antigravity's bundled node.exe
+    let node_root = home.join(".gemini").join("antigravity").join("bin").join("node");
+    let mut node_exe = PathBuf::from("node");
+    if let Ok(entries) = std::fs::read_dir(&node_root) {
+        for entry in entries.flatten() {
+            let candidate = entry.path().join("node.exe");
+            if candidate.is_file() {
+                node_exe = candidate;
+                break;
+            }
+        }
+    }
+
+    let mcp_json = serde_json::json!({
+        "mcpServers": {
+            "antigravity-sync": {
+                "command": node_exe.display().to_string(),
+                "args": [plugin_dir.join("server.mjs").display().to_string()]
+            }
+        }
+    });
+    std::fs::write(
+        plugin_dir.join("mcp_config.json"),
+        serde_json::to_string_pretty(&mcp_json).unwrap() + "\n",
+    )
+    .map_err(|e| format!("Failed to write mcp_config.json: {e}"))?;
+
+    let sdk_dir = plugin_dir.join("node_modules").join("@modelcontextprotocol").join("sdk");
+    if !sdk_dir.is_dir() && node_exe.is_file() {
+        if let Some(node_dir) = node_exe.parent() {
+            let npm_cli = node_dir.join("node_modules").join("npm").join("bin").join("npm-cli.js");
+            if npm_cli.is_file() {
+                let mut cmd = Command::new(&node_exe);
+                cmd.arg(&npm_cli)
+                    .args(["install", "--omit=dev", "--no-audit", "--no-fund"])
+                    .current_dir(&plugin_dir)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::piped())
+                    .creation_flags(CREATE_NO_WINDOW);
+                let cur_path = std::env::var_os("PATH").unwrap_or_default();
+                let mut new_path = std::ffi::OsString::from(node_dir.as_os_str());
+                new_path.push(";");
+                new_path.push(cur_path);
+                cmd.env("PATH", new_path);
+                let out = cmd
+                    .output()
+                    .map_err(|e| format!("Failed to run npm install: {e}"))?;
+                if !out.status.success() {
+                    let err = String::from_utf8_lossy(&out.stderr);
+                    return Err(format!("npm install failed: {}", err.trim()));
+                }
+            }
+        }
+    }
+
+    // Ensure antigravity-sync is enabled in ~/.gemini/config/config.json
+    let cfg_path = config_dir.join("config.json");
+    let mut cfg: serde_json::Value = std::fs::read_to_string(&cfg_path)
+        .ok()
+        .and_then(|raw| serde_json::from_str(raw.trim_start_matches('\u{feff}')).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    if let Some(obj) = cfg.as_object_mut() {
+        let plugins = obj
+            .entry("plugins")
+            .or_insert_with(|| serde_json::json!({}));
+        if let Some(p_obj) = plugins.as_object_mut() {
+            p_obj.insert("antigravity-sync".to_string(), serde_json::json!({ "enabled": true }));
+        }
+        let _ = std::fs::write(
+            &cfg_path,
+            serde_json::to_string_pretty(&cfg).unwrap() + "\n",
+        );
+    }
+
+    Ok("Antigravity Sync plugin installed/repaired! Restart Antigravity to load it.".to_string())
+}
