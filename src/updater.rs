@@ -6,7 +6,7 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-pub const APP_VERSION: &str = "2.1.5";
+pub const APP_VERSION: &str = "2.1.6";
 pub const REPO_OWNER: &str = "Caspi7";
 pub const REPO_NAME: &str = "antigravity-sync";
 pub const RELEASES_PAGE_URL: &str = "https://github.com/Caspi7/antigravity-sync/releases";

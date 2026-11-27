@@ -13,10 +13,10 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Antigravity Sync Setup")]
-[assembly: AssemblyDescription("Installer for Antigravity Sync v2.1.5")]
-[assembly: AssemblyVersion("2.1.5.0")]
-[assembly: AssemblyFileVersion("2.1.5.0")]
-[assembly: AssemblyInformationalVersion("2.1.5")]
+[assembly: AssemblyDescription("Installer for Antigravity Sync v2.1.6")]
+[assembly: AssemblyVersion("2.1.6.0")]
+[assembly: AssemblyFileVersion("2.1.6.0")]
+[assembly: AssemblyInformationalVersion("2.1.6")]
 
 namespace AntigravitySyncSetup
 {
@@ -40,7 +40,7 @@ namespace AntigravitySyncSetup
 
     static class InstallerCore
     {
-        public const string AppVersion = "2.1.5";
+        public const string AppVersion = "2.1.6";
         public const string RepoOwner = "Caspi7";
         public const string RepoName = "antigravity-sync";
         public const string LatestReleaseApiUrl = "https://api.github.com/repos/" + RepoOwner + "/" + RepoName + "/releases/latest";
@@ -146,20 +146,56 @@ namespace AntigravitySyncSetup
 
                 // Install @modelcontextprotocol/sdk on fresh machines (e.g. Laptop) if missing
                 string sdkDir = Path.Combine(pluginDir, @"node_modules\@modelcontextprotocol\sdk");
-                if (!Directory.Exists(sdkDir) && !string.IsNullOrEmpty(npmCmd))
+                if (!Directory.Exists(sdkDir) && File.Exists(nodeExe))
                 {
-                    var psi = new ProcessStartInfo(npmCmd, "install --omit=dev --no-audit --no-fund")
+                    string nodeDir = Path.GetDirectoryName(nodeExe);
+                    string npmCli = Path.Combine(nodeDir, @"node_modules\npm\bin\npm-cli.js");
+                    if (File.Exists(npmCli))
                     {
-                        WorkingDirectory = pluginDir,
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        WindowStyle = ProcessWindowStyle.Hidden
-                    };
-                    using (var proc = Process.Start(psi))
-                    {
-                        if (proc != null) proc.WaitForExit(60000);
+                        var psi = new ProcessStartInfo(nodeExe, "\"" + npmCli + "\" install --omit=dev --no-audit --no-fund")
+                        {
+                            WorkingDirectory = pluginDir,
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                            WindowStyle = ProcessWindowStyle.Hidden
+                        };
+                        string curPath = Environment.GetEnvironmentVariable("PATH") ?? "";
+                        psi.EnvironmentVariables["PATH"] = nodeDir + ";" + curPath;
+                        using (var proc = Process.Start(psi))
+                        {
+                            if (proc != null) proc.WaitForExit(90000);
+                        }
                     }
                 }
+
+                // Ensure antigravity-sync is enabled in ~/.gemini/config/config.json
+                EnsurePluginEnabledInConfig(Path.Combine(configDir, "config.json"), "antigravity-sync");
+            }
+            catch { }
+        }
+
+        private static void EnsurePluginEnabledInConfig(string configPath, string pluginName)
+        {
+            try
+            {
+                if (!File.Exists(configPath))
+                {
+                    File.WriteAllText(configPath, "{\n  \"plugins\": {\n    \"" + pluginName + "\": {\n      \"enabled\": true\n    }\n  }\n}\n", new UTF8Encoding(false));
+                    return;
+                }
+                string json = File.ReadAllText(configPath, Encoding.UTF8);
+                if (Regex.IsMatch(json, "\"" + Regex.Escape(pluginName) + "\"\\s*:")) return;
+
+                string entry = "\"" + pluginName + "\": {\n      \"enabled\": true\n    }";
+                if (Regex.IsMatch(json, "\"plugins\"\\s*:\\s*\\{"))
+                {
+                    json = Regex.Replace(json, "(\"plugins\"\\s*:\\s*\\{)", "$1\n    " + entry + ",", RegexOptions.None);
+                }
+                else
+                {
+                    json = Regex.Replace(json, "^\\s*\\{", "{\n  \"plugins\": {\n    " + entry + "\n  },", RegexOptions.None);
+                }
+                File.WriteAllText(configPath, json, new UTF8Encoding(false));
             }
             catch { }
         }

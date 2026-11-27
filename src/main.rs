@@ -26,9 +26,8 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.1.5 — Fluent SVG Icons & Consistent Theme Cycling\n\n\
-• Replaced Unicode glyph placeholders with crisp compile-time SVG icons across the command bar, Browse, Update, Release Notes, Help, and modal close buttons.\n\
-• Updated theme cycling to Light -> Dark -> Dark Blue -> Light (matching File Inventory) and ensured theme preferences persist across updates.";
+Antigravity Sync v2.1.6 — Reliable Laptop Plugin Auto-Install\n\n\
+• Fixed plugin dependency installation on fresh machines (runs Antigravity's bundled node.exe + npm-cli.js directly without requiring global Node/PATH) and automatically enables 'antigravity-sync' in ~/.gemini/config/config.json.";
 
 struct AppState {
     settings: AppSettings,
