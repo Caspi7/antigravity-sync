@@ -26,8 +26,8 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.1.6 — Reliable Laptop Plugin Auto-Install\n\n\
-• Fixed plugin dependency installation on fresh machines (runs Antigravity's bundled node.exe + npm-cli.js directly without requiring global Node/PATH) and automatically enables 'antigravity-sync' in ~/.gemini/config/config.json.";
+Antigravity Sync v2.1.7 — Fix Theme Reset After Updates\n\n\
+• Fixed settings.json losing the saved theme after every Setup/auto-update (Installer.cs now writes UTF-8 without BOM, and AppSettings::load() strips any UTF-8 BOM before parsing).";
 
 struct AppState {
     settings: AppSettings,

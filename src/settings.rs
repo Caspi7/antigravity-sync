@@ -77,7 +77,8 @@ impl AppSettings {
             Err(_) => return Self::default(),
         };
 
-        let mut settings: Self = match serde_json::from_str(&raw) {
+        let cleaned = raw.trim_start_matches('\u{feff}');
+        let mut settings: Self = match serde_json::from_str(cleaned) {
             Ok(parsed) => parsed,
             Err(_) => return Self::default(),
         };
@@ -308,6 +309,19 @@ mod tests {
         assert_eq!(loaded.schema_version, SETTINGS_SCHEMA_VERSION);
         assert!(loaded.enabled_targets.iter().any(|t| t == "conversation_summaries"));
         assert!(loaded.enabled_targets.iter().any(|t| t == "antigravity_state"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_handles_utf8_bom_without_losing_theme() {
+        let dir = unique_temp_dir("bom");
+        let path = dir.join("settings.json");
+        let with_bom = "\u{feff}{\n  \"schema_version\": 2,\n  \"theme\": \"Dark Blue\",\n  \"auto_check_updates\": true\n}\n";
+        fs::write(&path, with_bom).expect("write bom settings");
+
+        let loaded = AppSettings::load_from_path(&path);
+        assert_eq!(loaded.theme, "Dark Blue");
 
         let _ = fs::remove_dir_all(&dir);
     }

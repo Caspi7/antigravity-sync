@@ -13,10 +13,10 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Antigravity Sync Setup")]
-[assembly: AssemblyDescription("Installer for Antigravity Sync v2.1.6")]
-[assembly: AssemblyVersion("2.1.6.0")]
-[assembly: AssemblyFileVersion("2.1.6.0")]
-[assembly: AssemblyInformationalVersion("2.1.6")]
+[assembly: AssemblyDescription("Installer for Antigravity Sync v2.1.7")]
+[assembly: AssemblyVersion("2.1.7.0")]
+[assembly: AssemblyFileVersion("2.1.7.0")]
+[assembly: AssemblyInformationalVersion("2.1.7")]
 
 namespace AntigravitySyncSetup
 {
@@ -40,7 +40,7 @@ namespace AntigravitySyncSetup
 
     static class InstallerCore
     {
-        public const string AppVersion = "2.1.6";
+        public const string AppVersion = "2.1.7";
         public const string RepoOwner = "Caspi7";
         public const string RepoName = "antigravity-sync";
         public const string LatestReleaseApiUrl = "https://api.github.com/repos/" + RepoOwner + "/" + RepoName + "/releases/latest";
@@ -223,17 +223,17 @@ namespace AntigravitySyncSetup
 
                 if (File.Exists(settingsPath))
                 {
-                    string json = File.ReadAllText(settingsPath, Encoding.UTF8);
+                    string json = File.ReadAllText(settingsPath, Encoding.UTF8).TrimStart('\uFEFF');
                     if (Regex.IsMatch(json, "\"auto_check_updates\"\\s*:\\s*(true|false)", RegexOptions.IgnoreCase))
                     {
                         json = Regex.Replace(json, "\"auto_check_updates\"\\s*:\\s*(true|false)", "\"auto_check_updates\": " + boolVal, RegexOptions.IgnoreCase);
-                        File.WriteAllText(settingsPath, json, Encoding.UTF8);
+                        File.WriteAllText(settingsPath, json, new UTF8Encoding(false));
                     }
                 }
                 else
                 {
                     string json = "{\n  \"auto_check_updates\": " + boolVal + "\n}\n";
-                    File.WriteAllText(settingsPath, json, Encoding.UTF8);
+                    File.WriteAllText(settingsPath, json, new UTF8Encoding(false));
                 }
             }
             catch { }
