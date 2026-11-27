@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-$version = "1.0.0"
+$version = "1.0.1"
 $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dist = Join-Path $root "dist"

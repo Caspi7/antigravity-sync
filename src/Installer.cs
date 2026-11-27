@@ -9,16 +9,16 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Antigravity Sync Setup")]
-[assembly: AssemblyDescription("Installer for Antigravity Sync v1.0.0")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("1.0.0")]
+[assembly: AssemblyDescription("Installer for Antigravity Sync v1.0.1")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
+[assembly: AssemblyInformationalVersion("1.0.1")]
 
 namespace AntigravitySyncSetup
 {
     static class InstallerCore
     {
-        public const string AppVersion = "1.0.0";
+        public const string AppVersion = "1.0.1";
         public static string InstallDir
         {
             get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\AntigravitySync"); }

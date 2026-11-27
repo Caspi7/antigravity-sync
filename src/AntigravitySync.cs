@@ -15,9 +15,9 @@ using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Antigravity Sync")]
 [assembly: AssemblyDescription("One-click Google Drive / Cloud sync for Antigravity")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("1.0.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
+[assembly: AssemblyInformationalVersion("1.0.1")]
 
 namespace AntigravitySync
 {
@@ -186,7 +186,7 @@ namespace AntigravitySync
 
     public class MainForm : Form
     {
-        public const string AppVersion = "1.0.0";
+        public const string AppVersion = "1.0.1";
         public const string RepoOwner = "Caspi7";
         public const string RepoName = "antigravity-sync";
         public static readonly string ReleasesPageUrl = "https://github.com/" + RepoOwner + "/" + RepoName + "/releases";
@@ -252,6 +252,7 @@ namespace AntigravitySync
             _cmbTheme = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
+                FlatStyle = FlatStyle.Flat,
                 Location = new Point(492, 16),
                 Size = new Size(130, 26),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right
@@ -696,7 +697,7 @@ namespace AntigravitySync
             if (isDir)
             {
                 Directory.CreateDirectory(dst);
-                args = "\"" + src + "\" \"" + dst + "\" /MIR /R:2 /W:2 /NFL /NDL /NP /NJH /NJS";
+                args = "\"" + src + "\" \"" + dst + "\" /MIR /MT:8 /R:2 /W:2 /NFL /NDL /NP /NJH /NJS";
             }
             else
             {
@@ -719,6 +720,12 @@ namespace AntigravitySync
 
             using (var proc = Process.Start(psi))
             {
+                // Drain stdout/stderr asynchronously to prevent pipe buffer deadlock on large folders
+                proc.OutputDataReceived += (s, e) => { };
+                proc.ErrorDataReceived += (s, e) => { };
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+
                 while (!proc.WaitForExit(200))
                 {
                     if (token.IsCancellationRequested)
@@ -727,6 +734,7 @@ namespace AntigravitySync
                         token.ThrowIfCancellationRequested();
                     }
                 }
+                proc.WaitForExit();
                 if (proc.ExitCode >= 8)
                 {
                     throw new Exception("robocopy failed with exit code " + proc.ExitCode);
