@@ -1,61 +1,31 @@
 $ErrorActionPreference = "Stop"
-$version = "2.2.1"
-$csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-$cargo = "$env:USERPROFILE\.cargo\bin\cargo.exe"
-$mingwBin = (Get-ChildItem "$env:USERPROFILE\.gemini\antigravity\bin\llvm-mingw" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
-if ($mingwBin) { $env:PATH = "$mingwBin\bin;$env:PATH" }
-$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+$version = "2.2.2"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dist = Join-Path $root "dist"
 
-Push-Location $root
-try {
-    Write-Host "Running unit tests (0 warnings)..." -ForegroundColor Cyan
-    $env:RUSTFLAGS = "-D warnings -C link-self-contained=yes"
-    & $cargo test
-    if ($LASTEXITCODE -ne 0) { throw "cargo test failed" }
-
-    Write-Host "Building Rust + Slint Release binary v$version..." -ForegroundColor Cyan
-    & $cargo build --release
-    if ($LASTEXITCODE -ne 0) { throw "cargo build --release failed" }
-} finally {
-    Pop-Location
+$cargo = "$env:USERPROFILE\.cargo\bin\cargo.exe"
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:LOCALAPPDATA\Microsoft\WinGet\Links;" + [Environment]::GetEnvironmentVariable("Path","User") + ";" + [Environment]::GetEnvironmentVariable("Path","Machine")
+if (-not $env:CARGO_TARGET_DIR) {
+    $env:CARGO_TARGET_DIR = Join-Path $env:LOCALAPPDATA "antigravity-sync-target"
 }
 
-if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
-New-Item -ItemType Directory -Path $dist -Force | Out-Null
+function Find-Iscc {
+    $cmd = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    $candidates = @(
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+        "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+        "$env:LOCALAPPDATA\Programs\Antigravity IDE\resources\app\node_modules\innosetup\bin\ISCC.exe"
+    )
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            return $candidate
+        }
+    }
+    throw "ISCC.exe (Inno Setup 6) not found."
+}
 
-$builtExe = Join-Path $root "target\release\AntigravitySync.exe"
-$appExe   = Join-Path $dist "AntigravitySync.exe"
-$appGz    = Join-Path $dist "AntigravitySync.exe.gz"
-$setupExe = Join-Path $dist "AntigravitySync-Setup-v$version.exe"
-
-Copy-Item $builtExe $appExe -Force
-
-Write-Host "Compressing payload..." -ForegroundColor Cyan
-$inBytes = [System.IO.File]::ReadAllBytes($appExe)
-$outStream = [System.IO.File]::Create($appGz)
-$gz = New-Object System.IO.Compression.GZipStream($outStream, [System.IO.Compression.CompressionLevel]::Optimal)
-$gz.Write($inBytes, 0, $inBytes.Length)
-$gz.Close()
-$outStream.Close()
-
-$iconPath = Join-Path $root "assets\AntigravitySync.ico"
-$pluginDir = Join-Path $root "plugin"
-Write-Host "Building AntigravitySync-Setup-v$version.exe..." -ForegroundColor Cyan
-& $csc /nologo /target:winexe /optimize /warnaserror `
-    /win32icon:$iconPath `
-    /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:Microsoft.CSharp.dll `
-    /resource:"$appGz,AntigravitySync.exe.gz" `
-    /resource:"$pluginDir\plugin.json,plugin.json" `
-    /resource:"$pluginDir\package.json,package.json" `
-    /resource:"$pluginDir\server.mjs,server.mjs" `
-    /out:$setupExe (Join-Path $root "src\Installer.cs")
-if ($LASTEXITCODE -ne 0) { throw "Failed to compile Setup" }
-
-Remove-Item $appGz -Force
-
-# Verify PE Subsystem 2 (WINDOWS_GUI) on both binaries
 function Assert-WindowsGuiSubsystem([string]$path) {
     $bytes = [System.IO.File]::ReadAllBytes($path)
     $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
@@ -66,10 +36,35 @@ function Assert-WindowsGuiSubsystem([string]$path) {
     Write-Host "Verified PE Subsystem 2 (WINDOWS_GUI): $(Split-Path $path -Leaf)" -ForegroundColor Green
 }
 
-Assert-WindowsGuiSubsystem $appExe
-Assert-WindowsGuiSubsystem $setupExe
+Push-Location $root
+try {
+    Write-Host "Running unit tests..." -ForegroundColor Cyan
+    & $cargo test
+    if ($LASTEXITCODE -ne 0) { throw "cargo test failed" }
 
-# Generate SHA256SUMS.txt
+    Write-Host "Building Rust + Slint Release binary v$version..." -ForegroundColor Cyan
+    & $cargo build --release
+    if ($LASTEXITCODE -ne 0) { throw "cargo build --release failed" }
+} finally {
+    Pop-Location
+}
+
+$payloadDir = Join-Path $env:CARGO_TARGET_DIR "release"
+$builtExe = Join-Path $payloadDir "AntigravitySync.exe"
+Assert-WindowsGuiSubsystem $builtExe
+
+if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
+New-Item -ItemType Directory -Path $dist -Force | Out-Null
+
+$iscc = Find-Iscc
+Write-Host "Packaging AntigravitySync_Setup_x64_$version.exe with Inno Setup..." -ForegroundColor Cyan
+& $iscc "/DAppVersion=$version" "/DPayloadDir=$payloadDir" "/DRepoRoot=$root" (Join-Path $root "installer\AntigravitySync.iss")
+if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+$setupExe = Join-Path $dist "AntigravitySync_Setup_x64_$version.exe"
+if (-not (Test-Path $setupExe)) { throw "Installer not created: $setupExe" }
 $hash = (Get-FileHash $setupExe -Algorithm SHA256).Hash.ToLowerInvariant()
-"$hash  AntigravitySync-Setup-v$version.exe" | Set-Content (Join-Path $dist "SHA256SUMS.txt") -Encoding ASCII
+"$hash  AntigravitySync_Setup_x64_$version.exe" | Set-Content (Join-Path $dist "SHA256SUMS.txt") -Encoding ASCII
+$sizeMiB = [math]::Round((Get-Item $setupExe).Length / 1MB, 2)
+Write-Host "Created $setupExe ($sizeMiB MiB)" -ForegroundColor Green
 Write-Host "SHA-256: $hash" -ForegroundColor Green

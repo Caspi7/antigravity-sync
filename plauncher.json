@@ -7,14 +7,17 @@
   "channel": "stable",
   "icon_path": "assets/AntigravitySync.png",
   "installer": {
-    "kind": "sync_custom",
-    "uninstall_key": "AntigravitySync",
-    "asset_pattern": "AntigravitySync-Setup-v{version}.exe",
+    "kind": "inno",
+    "app_id": "8F6A9C3E-2D4B-4B7A-9C1E-7E8A3D5F2B10",
+    "asset_pattern": "AntigravitySync_Setup_x64_{version}.exe",
     "checksum_asset": "SHA256SUMS.txt"
   },
   "executable": {
     "file_name": "AntigravitySync.exe",
-    "registry_key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AntigravitySync",
-    "install_dir_value": "InstallLocation"
+    "registry_key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{8F6A9C3E-2D4B-4B7A-9C1E-7E8A3D5F2B10}_is1",
+    "install_dir_value": "InstallLocation",
+    "legacy_registry_keys": [
+      "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AntigravitySync"
+    ]
   }
 }

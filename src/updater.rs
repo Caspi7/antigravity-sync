@@ -6,7 +6,7 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-pub const APP_VERSION: &str = "2.2.1";
+pub const APP_VERSION: &str = "2.2.2";
 pub const REPO_OWNER: &str = "Caspi7";
 pub const REPO_NAME: &str = "antigravity-sync";
 pub const RELEASES_PAGE_URL: &str = "https://github.com/Caspi7/antigravity-sync/releases";
@@ -261,7 +261,7 @@ pub fn download_and_verify_update(
 
 pub fn launch_silent_installer(installer_path: &Path) -> Result<(), String> {
     Command::new(installer_path)
-        .arg("/S")
+        .args(["/SP-", "/SILENT", "/NORESTART", "/UPDATE"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
