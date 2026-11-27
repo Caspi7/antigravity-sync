@@ -25,14 +25,12 @@ use win32::{
 slint::include_modules!();
 
 const DEFAULT_RELEASE_NOTES: &str = "\
-Antigravity Sync v2.0.0 — Rust + Slint Fluent Edition\n\n\
-• Full rewrite in Rust + Slint (PE Subsystem 2 WINDOWS_GUI — zero console/PowerShell flashes).\n\
-• Windows 11 Fluent Desktop UI with 4 persisted themes: System, Light, Dark, and Dark Blue.\n\
-• Bottom-anchored command bar with Push, Pull, Launch Antigravity, Refresh, Cancel, Theme, Release Notes, and F1 Help Guide.\n\
-• Live sortable Target Data Grid showing Local vs. Drive sizes and semantic status pills.\n\
-• Multi-threaded robocopy (/MT:8) with null stdio (zero stdout pipe deadlock), % + ETA progress, and responsive Cancel.\n\
+Antigravity Sync v2.0.1 — Fluent Installer & Manual Update Check\n\n\
+• Added a manual Check Updates button in the top command bar and Release Notes modal (matching File Inventory).\n\
+• Upgraded the Windows installer to the File Inventory Fluent look & feel with automatic GitHub version checking, custom install folder, Desktop/Start Menu shortcut toggles, and auto-update preference.\n\
+• Full Rust + Slint native WINDOWS_GUI (PE Subsystem 2) with 4 persisted themes (System, Light, Dark, Dark Blue).\n\
 • Built-in 1-click GitHub Auto-Updater with live progress, SHA-256 verification, clean mutex handoff, and silent /S install.\n\
-• Automatic timestamped safety backup before every Pull.";
+• Multi-threaded robocopy (/MT:8) with % + ETA progress, responsive Cancel, and automatic safety backups before every Pull.";
 
 struct AppState {
     settings: AppSettings,
@@ -301,6 +299,76 @@ fn start_sync_task(
     });
 }
 
+fn spawn_update_check(
+    ui_weak: slint::Weak<MainWindow>,
+    state: Arc<Mutex<AppState>>,
+    manual: bool,
+) {
+    if manual {
+        if let Some(ui) = ui_weak.upgrade() {
+            ui.set_checking_updates(true);
+            ui.set_status_text(SharedString::from("Checking GitHub Releases for updates..."));
+            append_log(&ui, "Checking GitHub Releases for updates...");
+        }
+    }
+
+    thread::spawn(move || {
+        let res = check_for_update();
+        match res {
+            Ok(Some(info)) => {
+                let ver = info.version.clone();
+                let notes = if info.release_notes.trim().is_empty() {
+                    format!("Version v{ver} is available.\n\n{DEFAULT_RELEASE_NOTES}")
+                } else {
+                    format!(
+                        "What's new in v{ver}:\n{}\n\n---\n\n{DEFAULT_RELEASE_NOTES}",
+                        info.release_notes.trim()
+                    )
+                };
+                {
+                    let mut guard = state.lock().unwrap();
+                    guard.pending_update = Some(info);
+                }
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(ui) = ui_weak.upgrade() {
+                        ui.set_checking_updates(false);
+                        ui.set_latest_version(SharedString::from(ver.as_str()));
+                        ui.set_release_notes_text(SharedString::from(notes));
+                        ui.set_update_available(true);
+                        if manual {
+                            ui.set_status_text(SharedString::from(format!("Update v{ver} available")));
+                            append_log(&ui, &format!("Update available: v{ver}"));
+                            ui.set_show_release_notes(true);
+                        }
+                    }
+                });
+            }
+            Ok(None) => {
+                if manual {
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = ui_weak.upgrade() {
+                            ui.set_checking_updates(false);
+                            ui.set_status_text(SharedString::from(format!("Up to date (v{APP_VERSION})")));
+                            append_log(&ui, &format!("You are up to date (v{APP_VERSION})."));
+                        }
+                    });
+                }
+            }
+            Err(e) => {
+                if manual {
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = ui_weak.upgrade() {
+                            ui.set_checking_updates(false);
+                            ui.set_status_text(SharedString::from("Update check failed — open Releases to check manually."));
+                            append_log(&ui, &format!("Update check failed: {e}"));
+                        }
+                    });
+                }
+            }
+        }
+    });
+}
+
 fn main() -> Result<(), slint::PlatformError> {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
@@ -533,6 +601,15 @@ fn main() -> Result<(), slint::PlatformError> {
         open_url(RELEASES_PAGE_URL);
     });
 
+    // Manual Check for Updates
+    {
+        let ui_w = ui.as_weak();
+        let st = Arc::clone(&state);
+        ui.on_check_updates(move || {
+            spawn_update_check(ui_w.clone(), Arc::clone(&st), true);
+        });
+    }
+
     // 1-Click Auto-Update Download & Install
     {
         let ui_w = ui.as_weak();
@@ -611,29 +688,7 @@ fn main() -> Result<(), slint::PlatformError> {
             Arc::clone(&refresh_seq),
         );
     } else if state.lock().unwrap().settings.auto_check_updates {
-        let ui_w = ui.as_weak();
-        let st = Arc::clone(&state);
-        thread::spawn(move || {
-            if let Ok(Some(info)) = check_for_update() {
-                let ver = info.version.clone();
-                let notes = if info.release_notes.trim().is_empty() {
-                    format!("Version v{ver} is available.\n\n{DEFAULT_RELEASE_NOTES}")
-                } else {
-                    format!("What's new in v{ver}:\n{}\n\n---\n\n{DEFAULT_RELEASE_NOTES}", info.release_notes.trim())
-                };
-                {
-                    let mut guard = st.lock().unwrap();
-                    guard.pending_update = Some(info);
-                }
-                let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(ui) = ui_w.upgrade() {
-                        ui.set_latest_version(SharedString::from(ver));
-                        ui.set_release_notes_text(SharedString::from(notes));
-                        ui.set_update_available(true);
-                    }
-                });
-            }
-        });
+        spawn_update_check(ui.as_weak(), Arc::clone(&state), false);
     }
 
     ui.run()

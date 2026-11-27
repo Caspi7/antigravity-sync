@@ -5,11 +5,13 @@ import { Action, SemanticPill } from "controls.slint";
 export component ReleaseNotesModal inherits Rectangle {
     in property <string> app-version;
     in property <bool> update-available;
+    in property <bool> checking-updates;
     in property <string> latest-version;
     in property <string> release-notes-text;
     in property <bool> is-busy;
 
     callback close();
+    callback check-updates();
     callback install-update();
     callback open-releases();
 
@@ -158,6 +160,15 @@ export component ReleaseNotesModal inherits Rectangle {
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                     overflow: elide;
+                }
+
+                Action {
+                    label: root.checking-updates ? "Checking..." : "Check for Updates";
+                    height: 28px;
+                    enabled: !root.is-busy && !root.checking-updates;
+                    clicked => {
+                        root.check-updates();
+                    }
                 }
 
                 Rectangle {

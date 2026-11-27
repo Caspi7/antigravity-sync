@@ -64,7 +64,7 @@ export component MainWindow inherits Window {
     min-height: 540px;
     background: Palette.bg;
 
-    in property <string> app-version: "2.0.0";
+    in property <string> app-version: "2.0.1";
     in property <string> theme-label: "System";
     in-out property <string> sync-root: "G:\\My Drive\\AntigravitySync";
     in-out property <bool> auto-relaunch: true;
@@ -79,6 +79,7 @@ export component MainWindow inherits Window {
     in property <int> sort-column: 0;
     in property <bool> sort-ascending: true;
     in property <bool> update-available: false;
+    in property <bool> checking-updates: false;
     in property <string> latest-version: "";
     in property <string> release-notes-text: "";
     in-out property <bool> show-guide: false;
@@ -93,6 +94,7 @@ export component MainWindow inherits Window {
     callback cancel-clicked();
     callback browse-clicked();
     callback cycle-theme();
+    callback check-updates();
     callback install-update();
     callback open-releases();
     callback settings-changed();
@@ -238,6 +240,20 @@ export component MainWindow inherits Window {
                         hint: "Update available — click to review release notes and install";
                         clicked => {
                             root.show-release-notes = true;
+                        }
+                        hovered(h) => {
+                            root.hover-hint = h;
+                        }
+                    }
+
+                    if !root.update-available: Action {
+                        tab: true;
+                        label: root.checking-updates ? "Checking..." : "Check Updates";
+                        icon-text: "↻";
+                        enabled: !root.is-busy && !root.checking-updates;
+                        hint: "Manually check GitHub Releases for a newer version";
+                        clicked => {
+                            root.check-updates();
                         }
                         hovered(h) => {
                             root.hover-hint = h;
@@ -838,11 +854,15 @@ export component MainWindow inherits Window {
             height: 100%;
             app-version: root.app-version;
             update-available: root.update-available;
+            checking-updates: root.checking-updates;
             latest-version: root.latest-version;
             release-notes-text: root.release-notes-text;
             is-busy: root.is-busy;
             close => {
                 root.show-release-notes = false;
+            }
+            check-updates => {
+                root.check-updates();
             }
             install-update => {
                 root.install-update();
